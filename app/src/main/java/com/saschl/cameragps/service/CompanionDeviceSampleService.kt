@@ -40,6 +40,7 @@ import java.util.Locale
 import java.util.UUID
 
 
+@RequiresApi(Build.VERSION_CODES.S)
 class CompanionDeviceSampleService : CompanionDeviceService() {
 
     companion object {

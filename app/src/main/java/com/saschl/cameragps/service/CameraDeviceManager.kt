@@ -56,6 +56,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -456,12 +457,11 @@ private fun DevicesScreen(
         mutableStateOf(deviceManager.getAssociatedDevices())
     }
 
-/*    // Simplified pairing management using the new PairingManager
-    var currentPairingDevice by remember { mutableStateOf<AssociatedDeviceCompat?>(null) }
+    // Simplified pairing management using the new PairingManager
 
     LaunchedEffect(associatedDevices) {
         associatedDevices.forEach { device ->
-            scope.launch {
+            /*scope.launch {
                 val bluetoothManager = context.getSystemService<BluetoothManager>()
                 val adapter = bluetoothManager?.adapter
 
@@ -470,9 +470,18 @@ private fun DevicesScreen(
                 } else {
                     Timber.i("Device ${device.name} is already paired")
                 }
+            }*/
+            if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                // For Android versions below S/12 we need to start the service manually as there is not DevicePresenceObserver stuff
+                val serviceIntent = Intent(context.applicationContext, LocationSenderService::class.java)
+                serviceIntent.putExtra("address", device.address.uppercase(Locale.getDefault()))
+                serviceIntent.putExtra("startedManually", true)
+                Timber.i("Starting LocationSenderService for address: $device.address")
+                startForegroundService(context, serviceIntent)
             }
+
         }
-    }*/
+    }
 
     Scaffold(
         topBar = {
@@ -558,9 +567,6 @@ private fun ScanForDevicesMenu(
     // State for managing pairing after association
     var pendingPairingDevice by remember { mutableStateOf<AssociatedDeviceCompat?>(null) }
 
-    var assoicatedDevices by remember { mutableStateOf(deviceManager.getAssociatedDevices() )}
-
-
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
     ) {
@@ -629,7 +635,7 @@ private fun ScanForDevicesMenu(
                     deviceManager.startObservingDevicePresence(
                         ObservingDevicePresenceRequest.Builder().setAssociationId(device.id).build()
                     )
-                } else {
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     deviceManager.startObservingDevicePresence(device.address)
                 }
 
@@ -670,13 +676,27 @@ private fun ScanForDevicesMenu(
                     }
                 },
             ) {
-                Text(text = "Start", maxLines = 1)
+                Text(text = stringResource(R.string.start), maxLines = 1)
             }
         }
         if (errorMessage.isNotBlank()) {
             Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
         }
+
     }
+    Column(horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row {
+            Button(
+                onClick = {
+                    context.stopService(Intent(context.applicationContext, LocationSenderService::class.java))
+                },
+            ) {
+                Text(text = stringResource(R.string.stop_transmission), maxLines = 1)
+            }
+        }
+    }
+
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -686,6 +706,9 @@ private fun AssociatedDevicesList(
     onConnect: (AssociatedDeviceCompat) -> Unit,
     onDisassociate: (AssociatedDeviceCompat) -> Unit,
 ) {
+
+    val context = LocalContext.current
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -721,12 +744,24 @@ private fun AssociatedDevicesList(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                 /*   OutlinedButton(
-                        onClick = { onConnect(device) },
+                    OutlinedButton(
+                        onClick = {
+                            val serviceIntent = Intent(context.applicationContext,
+                                LocationSenderService::class.java
+                            )
+                            serviceIntent.putExtra(
+                                "address",
+                                device.address.uppercase(Locale.getDefault())
+                            )
+                            serviceIntent.putExtra("startedManually", true)
+                            Timber.i("Starting LocationSenderService for address: $device.address")
+                            context.stopService(Intent(context.applicationContext, LocationSenderService::class.java))
+                            startForegroundService(context, serviceIntent)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(text = "Connect")
-                    }*/
+                        Text(text = stringResource(R.string.start_transmission))
+                    }
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onDisassociate(device) },

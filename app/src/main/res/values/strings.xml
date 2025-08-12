@@ -48,4 +48,8 @@
     <!-- Error messages -->
     <string name="permissions_required_app_error">%s is required for the app to function</string>
     <string name="background_location_required_error">Background location access required for continuous GPS sync when app is not in foreground</string>
+    <string name="start">Start</string>
+    <string name="stop_transmission">Stop transmission</string>
+    <string name="force_start_transmission">Force start transmission</string>
+    <string name="start_transmission">Start transmission</string>
 </resources>

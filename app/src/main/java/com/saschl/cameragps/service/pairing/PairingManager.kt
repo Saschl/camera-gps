@@ -182,7 +182,7 @@ fun startDevicePresenceObservation(
         deviceManager.startObservingDevicePresence(
             ObservingDevicePresenceRequest.Builder().setAssociationId(device.id).build()
         )
-    } else {
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         deviceManager.startObservingDevicePresence(device.address)
     }
 }
