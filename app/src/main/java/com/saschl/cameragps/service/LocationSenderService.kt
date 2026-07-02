@@ -3,16 +3,10 @@ package com.saschl.cameragps.service
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.os.Build
 import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.core.app.ServiceCompat
@@ -21,39 +15,37 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
-import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.locationTransmissionNotificationId
+import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
+import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
+import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.saschl.cameragps.R
 import com.saschl.cameragps.notification.NotificationsHelper
-import com.saschl.cameragps.service.coordinator.BleSessionCoordinator
-import com.saschl.cameragps.service.coordinator.LocationTransmissionCoordinator
-import com.saschl.cameragps.service.coordinator.RemoteControlCoordinator
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
+import com.saschl.cameragps.service.location.AndroidLocationSource
+import com.saschl.cameragps.service.transport.AndroidBleTransport
 import com.saschl.cameragps.utils.PreferencesManager
 import com.saschl.cameragps.utils.SentryInit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
-
 
 /**
- * Thin Android lifecycle shell. Owns foreground service, notifications, sounds, and stopSelf().
- * All BLE/location/remote logic lives in coordinators that communicate via [ServiceEventBus].
+ * Thin Android lifecycle shell. Owns the foreground service, notifications,
+ * sounds, intent routing and stopSelf(). All BLE/location/session logic lives
+ * in the shared [CameraSessionOrchestrator]; the raw GATT/location plumbing in
+ * [AndroidBleTransport] and [AndroidLocationSource].
  */
 class LocationSenderService : LifecycleService() {
 
     private var isInitialized = true
     private lateinit var eventSoundPlayer: EventSoundPlayer
     private lateinit var bluetoothStateReceiver: BluetoothStateBroadcastReceiver
-    private val gattErrorCount = AtomicInteger(0)
     private val commandMutex = Mutex()
-    private val eventBus = ServiceEventBus()
     private val commandRouter = ServiceCommandRouter()
 
     private val deviceDao: CameraDeviceDAO by lazy {
@@ -64,30 +56,23 @@ class LocationSenderService : LifecycleService() {
         applicationContext.getSystemService()!!
     }
 
-    private val cameraConnectionManager by lazy {
-        CameraConnectionManager(
-            context = applicationContext,
-            bluetoothManager = bluetoothManager,
-            gattCallback = BluetoothGattCallbackHandler(),
+    private val transport by lazy {
+        AndroidBleTransport(applicationContext, bluetoothManager)
+    }
+
+    private val orchestrator by lazy {
+        CameraSessionOrchestrator(
+            transport = transport,
+            locationSource = AndroidLocationSource(applicationContext),
+            deviceDao = deviceDao,
+            scope = lifecycleScope,
         )
     }
 
-    private val remoteControlCoordinator by lazy {
-        RemoteControlCoordinator(cameraConnectionManager, eventBus, lifecycleScope, deviceDao)
-    }
-    private val bleSessionCoordinator by lazy {
-        BleSessionCoordinator(
-            cameraConnectionManager,
-            remoteControlCoordinator,
-            eventBus,
-            lifecycleScope,
-        )
-    }
-    private val locationTransmissionCoordinator by lazy {
-        LocationTransmissionCoordinator(this, cameraConnectionManager, eventBus)
-    }
     private val shutdownCoordinator by lazy {
-        ServiceShutdownCoordinator(deviceDao, cameraConnectionManager, eventBus)
+        ServiceShutdownCoordinator(deviceDao, transport) { startId ->
+            requestShutdown(startId)
+        }
     }
 
     companion object {
@@ -111,11 +96,13 @@ class LocationSenderService : LifecycleService() {
         if (!startAsForegroundService()) return
 
         initializeLogging()
-        locationTransmissionCoordinator.initializeLocationServices()
+        orchestrator.start()
 
-        // Single event collection loop — all side effects go here
         lifecycleScope.launch {
-            eventBus.events.collect { event -> handleEvent(event) }
+            orchestrator.events.collect { event -> handleEvent(event) }
+        }
+        lifecycleScope.launch {
+            orchestrator.sessions.collect { sessions -> mirrorToCompanionMaps(sessions) }
         }
     }
 
@@ -131,9 +118,8 @@ class LocationSenderService : LifecycleService() {
         activeTransmissions.clear()
         remoteFeatureActive.clear()
         sessionPhases.clear()
-        remoteControlCoordinator.cancelAllProbes()
-        locationTransmissionCoordinator.shutdown()
-        cameraConnectionManager.disconnectAll()
+        orchestrator.shutdownAll()
+        transport.disconnectAll()
         Timber.i("Destroyed service")
     }
 
@@ -163,63 +149,62 @@ class LocationSenderService : LifecycleService() {
         return START_REDELIVER_INTENT
     }
 
-    // ==================== Event handler — single place for side effects ====================
-
     @SuppressLint("MissingPermission")
-    private suspend fun handleEvent(event: ServiceEvent) {
+    private fun handleEvent(event: OrchestratorEvent) {
         when (event) {
-            is ServiceEvent.PhaseChanged -> {
-                val normalized = event.address.uppercase()
-                sessionPhases[normalized] = event.phase
-
-                activeTransmissions[normalized] = event.phase == BleSessionPhase.Transmitting
-                event.remoteActive?.let { remoteFeatureActive[normalized] = it }
-            }
-
-            is ServiceEvent.HandshakeComplete -> {
-                val normalized = event.address.uppercase()
-                sessionPhases[normalized] = BleSessionPhase.Transmitting
-                activeTransmissions[normalized] = true
-                locationTransmissionCoordinator.startTransmission()
-                remoteControlCoordinator.setRemoteStatusMonitoringEnabled(
-                    event.address,
-                    deviceDao.isRemoteControlEnabled(event.address.uppercase())
+            is OrchestratorEvent.DeviceConnected -> {
+                eventSoundPlayer.play(TransmissionSoundEvent.CAMERA_CONNECTED)
+                val notification = NotificationsHelper.buildNotification(
+                    this,
+                    orchestrator.connectedDeviceCount()
+                )
+                NotificationsHelper.showNotification(
+                    this,
+                    locationTransmissionNotificationId,
+                    notification
                 )
             }
 
-            is ServiceEvent.DeviceCleared -> {
-                val normalized = event.address.uppercase()
-                sessionPhases.remove(normalized)
-                activeTransmissions.remove(normalized)
-                remoteFeatureActive.remove(normalized)
-                remoteControlCoordinator.cancelRemoteStatusProbe(normalized)
+            is OrchestratorEvent.DeviceDisconnected -> {
+                eventSoundPlayer.play(TransmissionSoundEvent.CAMERA_DISCONNECTED)
+                updateNotificationAfterDisconnect()
             }
 
-            is ServiceEvent.AllDevicesCleared -> {
-                sessionPhases.clear()
-                activeTransmissions.clear()
-                remoteFeatureActive.clear()
-                remoteControlCoordinator.cancelAllProbes()
+            is OrchestratorEvent.HandshakeCompleted -> {
+                // Session state reaches the UI through the sessions mirror
             }
 
-            is ServiceEvent.FirstLocationAcquired -> {
+            is OrchestratorEvent.PairingFailed -> {
+                Timber.e("Pairing failed for ${event.identifier}")
+            }
+
+            is OrchestratorEvent.FirstLocationAcquired -> {
                 eventSoundPlayer.play(TransmissionSoundEvent.LOCATION_ACQUIRED)
             }
 
-            is ServiceEvent.LocationInvalid -> {
+            is OrchestratorEvent.LocationUnavailable -> {
                 eventSoundPlayer.play(TransmissionSoundEvent.LOCATION_INVALID)
             }
+        }
+    }
 
-            is ServiceEvent.RequestShutdown -> {
-                requestShutdown(event.startId)
+    /** Diff-apply the shared session registry into the companion maps the Compose UI observes. */
+    private fun mirrorToCompanionMaps(sessions: Map<String, CameraSession>) {
+        (sessionPhases.keys - sessions.keys).forEach { stale ->
+            sessionPhases.remove(stale)
+            activeTransmissions.remove(stale)
+            remoteFeatureActive.remove(stale)
+        }
+        sessions.forEach { (identifier, session) ->
+            if (sessionPhases[identifier] != session.phase) {
+                sessionPhases[identifier] = session.phase
             }
-
-            is ServiceEvent.RemoteFeatureActivated -> {
-                remoteFeatureActive[event.address.uppercase()] = true
+            val transmitting = session.phase == BleSessionPhase.Transmitting
+            if (activeTransmissions[identifier] != transmitting) {
+                activeTransmissions[identifier] = transmitting
             }
-
-            is ServiceEvent.RemoteFeatureDeactivated -> {
-                remoteFeatureActive[event.address.uppercase()] = false
+            if (remoteFeatureActive[identifier] != session.remoteFeatureActive) {
+                remoteFeatureActive[identifier] = session.remoteFeatureActive
             }
         }
     }
@@ -242,39 +227,40 @@ class LocationSenderService : LifecycleService() {
             }
 
             is ServiceCommand.TriggerRemoteShutter -> {
-                val success = bleSessionCoordinator.triggerRemoteShutter(command.address)
+                val success = orchestrator.triggerRemoteShutter(command.address)
                 if (!success) {
                     Timber.w("Remote shutter request failed for ${command.address.uppercase()}")
                 }
             }
 
+            is ServiceCommand.SendRemoteCommand -> {
+                val success = orchestrator.sendRemoteCommand(command.address, command.command)
+                if (!success) {
+                    Timber.w("Remote command ${command.command} failed for ${command.address.uppercase()}")
+                }
+            }
+
+            is ServiceCommand.TriggerShutterSequence -> {
+                val success = orchestrator.triggerShutterSequence(command.address)
+                if (!success) {
+                    Timber.w("Shutter sequence failed to start for ${command.address.uppercase()}")
+                }
+            }
+
             is ServiceCommand.SetRemoteControlMonitoring -> {
-                remoteControlCoordinator.setRemoteStatusMonitoringEnabled(
-                    command.address,
-                    command.enabled,
-                )
+                orchestrator.setRemoteMonitoring(command.address, command.enabled)
             }
 
             is ServiceCommand.Connect -> {
                 ensureBluetoothStateReceiver()
-                if (!cameraConnectionManager.isConnected(command.address)) {
+                if (!transport.hasConnection(command.address)) {
                     Timber.i("Service initialized")
-                    eventBus.emit(
-                        ServiceEvent.PhaseChanged(
-                            command.address,
-                            BleSessionPhase.Connecting
-                        )
-                    )
+                    orchestrator.onConnectRequested(command.address)
                     runCatching {
-                        cameraConnectionManager.connect(command.address)
+                        transport.connect(command.address)
                     }.onFailure {
                         Timber.e("Failed to connect to device, bluetooth is likely turned off")
-                        eventBus.emit(
-                            ServiceEvent.PhaseChanged(
-                                command.address,
-                                BleSessionPhase.Error
-                            )
-                        )
+                        orchestrator.onConnectFailed(command.address)
                     }
                 }
             }
@@ -284,8 +270,10 @@ class LocationSenderService : LifecycleService() {
     private fun ensureBluetoothStateReceiver() {
         if (!::bluetoothStateReceiver.isInitialized) {
             bluetoothStateReceiver = BluetoothStateBroadcastReceiver { enabled ->
-                Timber.w("Bluetooth turned off, will shutdown service")
-                if (!enabled) eventBus.emit(ServiceEvent.RequestShutdown(null))
+                if (!enabled) {
+                    Timber.w("Bluetooth turned off, will shutdown service")
+                    requestShutdown()
+                }
             }
             val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
             ContextCompat.registerReceiver(
@@ -297,129 +285,11 @@ class LocationSenderService : LifecycleService() {
         }
     }
 
-    // ==================== GATT callback — pure delegation ====================
-
-    private inner class BluetoothGattCallbackHandler : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            super.onConnectionStateChange(gatt, status, newState)
-
-            if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-                Timber.i("Connected to device with status %d", status)
-                cameraConnectionManager.resumeDevice(gatt.device.address.uppercase())
-                eventBus.emit(
-                    ServiceEvent.PhaseChanged(
-                        gatt.device.address,
-                        BleSessionPhase.Connected
-                    )
-                )
-                eventSoundPlayer.play(TransmissionSoundEvent.CAMERA_CONNECTED)
-                resumeLocationTransmission(gatt)
-                return
-            }
-
-            if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
-                if (status == 19 || status == 8 || status == 0) {
-                    Timber.i("Device disconnected in callback due to device turned off or out of range: $status")
-                } else {
-                    Timber.e("An error happened: $status")
-                }
-                cameraConnectionManager.pauseDevice(gatt.device.address.uppercase())
-                eventBus.emit(ServiceEvent.DeviceCleared(gatt.device.address))
-                eventSoundPlayer.play(TransmissionSoundEvent.CAMERA_DISCONNECTED)
-                cancelLocationTransmission()
-                return
-            }
-
-            Timber.d("Ignoring connection callback with status=$status and state=$newState")
-        }
-
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray
-        ) {
-            super.onCharacteristicChanged(gatt, characteristic, value)
-            bleSessionCoordinator.onCharacteristicChanged(gatt, characteristic, value)
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            super.onServicesDiscovered(gatt, status)
-            Timber.i("Services discovered for ${gatt.device.address} with status $status")
-            bleSessionCoordinator.onServicesDiscovered(gatt, status)
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt,
-            writtenCharacteristic: BluetoothGattCharacteristic?,
-            status: Int
-        ) {
-            super.onCharacteristicWrite(gatt, writtenCharacteristic, status)
-            bleSessionCoordinator.onCharacteristicWrite(gatt, writtenCharacteristic, status)
-
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                gattErrorCount.incrementAndGet()
-            } else if (writtenCharacteristic?.uuid == constructBleUUID(SonyBluetoothConstants.CHARACTERISTIC_UUID)) {
-                gattErrorCount.set(0)
-            }
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onDescriptorWrite(
-            gatt: BluetoothGatt,
-            descriptor: BluetoothGattDescriptor,
-            status: Int
-        ) {
-            super.onDescriptorWrite(gatt, descriptor, status)
-            bleSessionCoordinator.onDescriptorWrite(gatt, descriptor, status)
-        }
-
-        @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            super.onCharacteristicRead(gatt, characteristic, status)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                bleSessionCoordinator.onCharacteristicRead(gatt, characteristic.value, status)
-            }
-        }
-
-        @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int
-        ) {
-            super.onCharacteristicRead(gatt, characteristic, value, status)
-            bleSessionCoordinator.onCharacteristicRead(gatt, value, status)
-        }
-    }
-
     // ==================== Notification helpers ====================
 
-    @SuppressLint("MissingPermission")
-    private fun resumeLocationTransmission(gatt: BluetoothGatt) {
-        eventBus.emit(
-            ServiceEvent.PhaseChanged(
-                gatt.device.address,
-                BleSessionPhase.DiscoveringServices
-            )
-        )
-        val notification = NotificationsHelper.buildNotification(
-            this,
-            cameraConnectionManager.getActiveCameras().size
-        )
-        NotificationsHelper.showNotification(this, locationTransmissionNotificationId, notification)
-        gatt.discoverServices()
-    }
-
-    private fun cancelLocationTransmission() {
-        if (cameraConnectionManager.getActiveCameras().isEmpty()) {
+    private fun updateNotificationAfterDisconnect() {
+        val connectedCount = orchestrator.connectedDeviceCount()
+        if (connectedCount == 0) {
             val notification = NotificationsHelper.buildNotification(
                 this,
                 getString(R.string.app_standby_title),
@@ -430,13 +300,12 @@ class LocationSenderService : LifecycleService() {
                 locationTransmissionNotificationId,
                 notification
             )
-            Timber.d("No active cameras remaining, stopping location updates")
-            locationTransmissionCoordinator.stopTransmissionIfNoActiveCameras(noActiveCameras = true)
+            Timber.d("No active cameras remaining")
         } else {
             Timber.d("Active cameras remaining, updating notification")
             val notification = NotificationsHelper.buildNotification(
                 this,
-                cameraConnectionManager.getActiveCameras().size,
+                connectedCount,
                 channelId = NotificationsHelper.DISCONNECT_NOTIFICATION_CHANNEL
             )
             NotificationsHelper.showNotification(
@@ -486,6 +355,4 @@ class LocationSenderService : LifecycleService() {
         isInitialized = false
         if (startId != null) stopSelf(startId) else stopSelf()
     }
-
-    private fun constructBleUUID(characteristic: String): UUID = UUID.fromString(characteristic)
 }

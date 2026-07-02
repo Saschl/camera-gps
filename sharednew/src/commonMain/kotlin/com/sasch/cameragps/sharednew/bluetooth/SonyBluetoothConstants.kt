@@ -28,17 +28,38 @@ object SonyBluetoothConstants {
 
     const val ACTION_REQUEST_SHUTDOWN = "com.saschl.cameragps.ACTION_REQUEST_SHUTDOWN"
     const val ACTION_TRIGGER_REMOTE_SHUTTER = "com.saschl.cameragps.ACTION_TRIGGER_REMOTE_SHUTTER"
+    const val ACTION_SEND_REMOTE_COMMAND = "com.saschl.cameragps.ACTION_SEND_REMOTE_COMMAND"
+    const val ACTION_TRIGGER_SHUTTER_SEQUENCE =
+        "com.saschl.cameragps.ACTION_TRIGGER_SHUTTER_SEQUENCE"
     const val ACTION_SET_REMOTE_CONTROL_MONITORING =
         "com.saschl.cameragps.ACTION_SET_REMOTE_CONTROL_MONITORING"
+
+    // ATT error codes indicating a pairing/encryption problem (same values on Android GATT)
+    const val ATT_ERROR_INSUFFICIENT_AUTHENTICATION = 5
+    const val ATT_ERROR_INSUFFICIENT_ENCRYPTION = 15
 
     // GPS enable command bytes
     val GPS_ENABLE_COMMAND = byteArrayOf(0x01)
 
-    // remote control commands
+    // remote control commands (see tools/sony_shutter/intervalometer.py)
     val FULL_SHUTTER_DOWN_COMMAND = byteArrayOf(0x01, 0x09)
     val FULL_SHUTTER_UP_COMMAND = byteArrayOf(0x01, 0x08)
+    val HALF_SHUTTER_DOWN_COMMAND = byteArrayOf(0x01, 0x07)
+    val HALF_SHUTTER_UP_COMMAND = byteArrayOf(0x01, 0x06)
+    val AF_ON_DOWN_COMMAND = byteArrayOf(0x01, 0x15)
+    val AF_ON_UP_COMMAND = byteArrayOf(0x01, 0x14)
 
+    // Same bytes as HALF_SHUTTER_UP — a released half-press acts as a harmless status probe
     val PROBE_COMMAND = byteArrayOf(0x01, 0x06)
+
+    /** Remote status payload: camera idle/ready (also acks a full press → auto shutter-up). */
+    val STATUS_READY = byteArrayOf(0x02, 0xA0.toByte(), 0x00)
+
+    /** Remote status payload: shutter active — the exposure is running. */
+    val STATUS_SHUTTER_ACTIVE = byteArrayOf(0x02, 0xA0.toByte(), 0x20)
+
+    /** Remote status payload: focus acquired after a half press. */
+    val STATUS_FOCUS_ACQUIRED = byteArrayOf(0x02, 0x3F, 0x20)
 
     // Location update interval
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
@@ -47,7 +68,7 @@ object SonyBluetoothConstants {
     const val ACCURACY_THRESHOLD_METERS = 200.0
 
     // Time threshold for old location updates (30 seconds)
-    const val OLD_LOCATION_THRESHOLD_MS = 30
+    const val OLD_LOCATION_THRESHOLD_MS = 30000
 
     const val locationTransmissionNotificationId = 404
 }

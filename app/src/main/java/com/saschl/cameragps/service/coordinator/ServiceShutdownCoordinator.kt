@@ -3,21 +3,19 @@ package com.saschl.cameragps.service.coordinator
 import android.annotation.SuppressLint
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
-import com.saschl.cameragps.service.CameraConnectionManager
-import com.saschl.cameragps.service.ServiceEvent
-import com.saschl.cameragps.service.ServiceEventBus
+import com.saschl.cameragps.service.transport.AndroidBleTransport
 import timber.log.Timber
 
 class ServiceShutdownCoordinator(
     private val deviceDao: CameraDeviceDAO,
-    private val cameraConnectionManager: CameraConnectionManager,
-    private val eventBus: ServiceEventBus,
+    private val transport: AndroidBleTransport,
+    private val onShutdownRequested: (Int?) -> Unit,
 ) {
     @SuppressLint("MissingPermission")
     suspend fun handleNoAddress(startId: Int) {
         if (deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
             Timber.i("No always-on devices found, shutting down service")
-            eventBus.emit(ServiceEvent.RequestShutdown(startId))
+            onShutdownRequested(startId)
             return
         }
 
@@ -26,7 +24,7 @@ class ServiceShutdownCoordinator(
                 .filter { it.alwaysOnEnabled }
                 .forEach { device ->
                     runCatching {
-                        cameraConnectionManager.connect(device.mac)
+                        transport.connect(device.mac)
                     }.onFailure { handleGattConnectionFailure(startId, device) }
                 }
         }
@@ -48,13 +46,11 @@ class ServiceShutdownCoordinator(
 
         // Sometimes false "disappeared" events appear, so keep the device active if it was always on.
         if (!deviceDao.isDeviceAlwaysOnEnabled(address)) {
-            cameraConnectionManager.pauseDevice(address)
+            transport.pauseDevice(address)
         }
-        if (cameraConnectionManager.getActiveCameras()
-                .isEmpty() && deviceDao.getAlwaysOnEnabledDeviceCount() == 0
-        ) {
+        if (transport.connectedCount() == 0 && deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
             Timber.d("No connected or always on cameras remaining, shutting down service")
-            eventBus.emit(ServiceEvent.RequestShutdown(startId))
+            onShutdownRequested(startId)
         }
     }
 
@@ -62,8 +58,8 @@ class ServiceShutdownCoordinator(
     private suspend fun handleShutdownAllDevices(startId: Int) {
         if (deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
             Timber.i("No always-on devices found, disconnecting all cameras and shutting down service")
-            cameraConnectionManager.disconnectAll()
-            eventBus.emit(ServiceEvent.RequestShutdown(startId))
+            transport.disconnectAll()
+            onShutdownRequested(startId)
         } else {
             Timber.i("At least one always-on device found, not shutting down service")
         }

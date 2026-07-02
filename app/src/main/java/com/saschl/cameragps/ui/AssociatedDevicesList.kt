@@ -234,7 +234,7 @@ fun AssociatedDevicesList(
                                             LocationSenderService::class.java
                                         ).apply {
                                             action =
-                                                SonyBluetoothConstants.ACTION_TRIGGER_REMOTE_SHUTTER
+                                                SonyBluetoothConstants.ACTION_TRIGGER_SHUTTER_SEQUENCE
                                             putExtra("address", device.address.uppercase())
                                         }
                                         context.startService(shutterIntent)

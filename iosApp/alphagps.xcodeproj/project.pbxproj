@@ -314,8 +314,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app needs access to Bluetooth to connect to your cameras and transmit location data for geotagging your photos.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos, even when the phone is locked.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs constant access to location services to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos. Select \"Always\" to enable geotagging in the background.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos, even when the phone is locked. Select \"Always\" to enable geotagging in the background.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs constant access to location services to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

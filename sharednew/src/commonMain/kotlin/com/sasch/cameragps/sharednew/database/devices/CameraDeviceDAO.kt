@@ -30,6 +30,9 @@ interface CameraDeviceDAO {
     @Query("SELECT deviceEnabled FROM camera_devices WHERE mac = UPPER(:address)")
     suspend fun isDeviceEnabled(address: String): Boolean
 
+    @Query("SELECT deviceEnabled FROM camera_devices WHERE mac = UPPER(:address)")
+    suspend fun findDeviceEnabled(address: String): Boolean?
+
     @Query("SELECT count(1) FROM camera_devices WHERE alwaysOnEnabled = 1")
     suspend fun getAlwaysOnEnabledDeviceCount(): Int
 

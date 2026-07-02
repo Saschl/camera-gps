@@ -5,26 +5,22 @@ import com.diamondedge.logging.LogLevel
 import com.diamondedge.logging.VariableLogLevel
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.IosAppPreferences
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.autoReconnectStore
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleSessionCoordinator
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleSessionEvent
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.LocationDataConfig
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteControlCoordinator
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteCommand
+import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
+import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.DatabaseLogger
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
-import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -35,37 +31,27 @@ import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
 import platform.CoreBluetooth.CBCentralManagerOptionRestoreIdentifierKey
 import platform.CoreBluetooth.CBCentralManagerRestoredStatePeripheralsKey
-import platform.CoreBluetooth.CBCharacteristic
-import platform.CoreBluetooth.CBCharacteristicPropertyIndicate
-import platform.CoreBluetooth.CBCharacteristicPropertyNotify
 import platform.CoreBluetooth.CBConnectPeripheralOptionNotifyOnConnectionKey
 import platform.CoreBluetooth.CBManagerStatePoweredOn
 import platform.CoreBluetooth.CBPeripheral
-import platform.CoreBluetooth.CBPeripheralDelegateProtocol
 import platform.CoreBluetooth.CBPeripheralStateConnected
-import platform.CoreBluetooth.CBService
-import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSNumber
 import platform.Foundation.NSUUID
-import platform.Foundation.create
 import platform.darwin.NSObject
-import platform.posix.memcpy
 import kotlin.coroutines.resume
 
 /**
  * iOS Bluetooth controller — thin shell backed by CoreBluetooth.
  *
- * All BLE session handshake logic lives in shared [BleSessionCoordinator].
- * Location transmission is handled by [IosLocationTransmissionManager].
- * Auto-reconnect persistence is handled by [IosAutoReconnectStore].
- *
+ * All session orchestration (sequential BLE queue, handshake, pairing retries,
+ * location transmission) lives in the shared [CameraSessionOrchestrator].
  * This class owns only:
- * - CoreBluetooth central + peripheral delegate wiring & state restoration
- * - iOS-specific pairing retry (auth error handling)
- * - Session map (PeripheralSession)
- * - Device list / UI state
+ * - CBCentralManager + central delegate wiring & state restoration
+ * - Scanning (Sony manufacturer-ID filter) and connect/disconnect plumbing
+ * - Auto-reconnect persistence ([IosAutoReconnectStore])
+ * - App/device-enabled state and the device list for the UI
  *
  * Call [ensureInitialized] from AppDelegate as early as possible.
  */
@@ -95,7 +81,7 @@ object IosBluetoothController : BluetoothController {
 
     private val logging = logging()
 
-    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val deviceDao: CameraDeviceDAO by lazy {
         LogDatabase.getRoomDatabase(getDatabaseBuilder()).cameraDeviceDao()
@@ -113,7 +99,6 @@ object IosBluetoothController : BluetoothController {
     // UUID string -> CBPeripheral
     private val discovered = mutableMapOf<String, CBPeripheral>()
     private val connected = mutableMapOf<String, CBPeripheral>()
-    private val sessions = mutableMapOf<String, PeripheralSession>()
 
     // Pending callbacks
     private val connectCallbacks = mutableMapOf<String, (Boolean) -> Unit>()
@@ -123,338 +108,82 @@ object IosBluetoothController : BluetoothController {
     private val deviceEnabledOverrides = mutableMapOf<String, Boolean>()
     private val persistedDevices = mutableMapOf<String, CameraDevice>()
 
-    // --- Extracted collaborators ---
+    // --- Collaborators ---
     private val autoReconnectStore = IosAutoReconnectStore()
 
-    private val gattPort = IosBleGattPort(object : IosBleGattPort.SessionProvider {
-        override fun getSession(identifier: String): IosBleGattPort.IosBleSession? {
-            return sessions[identifier]
-        }
-    })
-
-    private val remoteControlCoordinator = RemoteControlCoordinator(
-        port = gattPort,
+    private val transport: IosBleTransport = IosBleTransport(
         scope = controllerScope,
-    )
-
-    private val bleSessionCoordinator = BleSessionCoordinator(
-        port = gattPort,
-        remoteControlCoordinator = remoteControlCoordinator,
-    )
-
-    private val locationTransmissionManager = IosLocationTransmissionManager(
-        scope = controllerScope,
-        host = object : IosLocationTransmissionManager.Host {
-            override fun getReadySessionIdentifiers(): Set<String> =
-                sessions.entries
-                    .filter { it.value.phase == PeripheralPhase.Ready }
-                    .map { it.key }
-                    .toSet()
-
-            override fun getLocationDataConfig(identifier: String): LocationDataConfig? =
-                bleSessionCoordinator.getLocationDataConfig(identifier)
-
-            override fun writeLocationPacket(identifier: String, packet: ByteArray) {
-                gattPort.writeCharacteristic(
-                    identifier,
-                    SonyBluetoothConstants.CHARACTERISTIC_UUID,
-                    packet,
-                )
+        onPairingGateExhausted = { peripheral ->
+            if (central.state == CBManagerStatePoweredOn) {
+                central.cancelPeripheralConnection(peripheral)
             }
-
-            override fun isAppEnabledForTransmission(): Boolean = appEnabled
-
-            override fun onLocationTrackingChanged() = refreshDeviceList()
         },
     )
 
-    fun hasPreciseAccuracyAuthorization(): Boolean =
-        locationTransmissionManager.hasPreciseAccuracyAuthorization()
+    private val locationSource = IosLocationSource()
+
+    private val orchestrator = CameraSessionOrchestrator(
+        transport = transport,
+        locationSource = locationSource,
+        deviceDao = deviceDao,
+        scope = controllerScope,
+        shouldRemainConnected = { identifier ->
+            if (!isDeviceEnabled(identifier)) {
+                disconnect(identifier)
+                false
+            } else {
+                true
+            }
+        },
+        isTransmissionAllowed = { appEnabled },
+    )
+
+    fun hasPreciseAccuracyAuthorization(): Boolean = locationSource.hasPreciseAuthorization()
 
     init {
+        locationSource.onAuthorizationChanged = {
+            orchestrator.locationManager.updateTracking()
+        }
+        orchestrator.start()
+
         controllerScope.launch {
             syncPersistedDevices()
         }
-        // Collect shared coordinator events → update UI / session state
         controllerScope.launch {
-            bleSessionCoordinator.events.collect { event ->
-                when (event) {
-                    is BleSessionEvent.HandshakeComplete -> {
-                        if (!isDeviceEnabled(event.identifier)) {
-                            disconnect(event.identifier)
-                            return@collect
-                        }
-                        sessions[event.identifier]?.phase = PeripheralPhase.Ready
-                        locationTransmissionManager.updateLocationTracking()
-                        refreshDeviceList()
-                        locationTransmissionManager.sendImmediateIfCached(event.identifier)
-                        if (deviceDao.isRemoteControlEnabled(event.identifier.uppercase())) {
-                            remoteControlCoordinator.startRemoteStatusMonitoring(event.identifier)
-                        }
-                    }
-
-                    is BleSessionEvent.PhaseChanged -> {
-                        refreshDeviceList()
-                    }
-
-                    is BleSessionEvent.RemoteFeatureActivated,
-                    is BleSessionEvent.RemoteFeatureDeactivated -> {
+            orchestrator.events.collect { event ->
+                if (event is OrchestratorEvent.PairingFailed) {
+                    val peripheral = connected[resolveKnownIdentifier(event.identifier)]
+                    if (peripheral != null && central.state == CBManagerStatePoweredOn) {
+                        central.cancelPeripheralConnection(peripheral)
                     }
                 }
             }
+        }
+        // Session/transmission state drives the UI device list
+        controllerScope.launch {
+            orchestrator.sessions.collect { refreshDeviceList() }
         }
         controllerScope.launch {
-            remoteControlCoordinator.events.collect { event ->
-                when (event) {
-                    is BleSessionEvent.RemoteFeatureActivated -> {
-                        sessions[event.identifier]?.remoteFeatureActive = true
-                        refreshDeviceList()
-                    }
-
-                    is BleSessionEvent.RemoteFeatureDeactivated -> {
-                        sessions[event.identifier]?.remoteFeatureActive = false
-                        refreshDeviceList()
-                    }
-
-                    is BleSessionEvent.PhaseChanged -> {
-
-                    }
-                    is BleSessionEvent.HandshakeComplete -> {
-                        if (deviceDao.isRemoteControlEnabled(event.identifier.uppercase())) {
-                            remoteControlCoordinator.startRemoteStatusMonitoring(event.identifier)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------------------
-    // CoreBluetooth peripheral delegate — routes callbacks to shared coordinators
-    // ---------------------------------------------------------------------------
-    private val peripheralDelegate = object : NSObject(), CBPeripheralDelegateProtocol {
-
-        @ObjCSignatureOverride
-        override fun peripheral(peripheral: CBPeripheral, didDiscoverServices: NSError?) {
-            peripheral.services?.forEach { service ->
-                peripheral.discoverCharacteristics(
-                    characteristicUUIDs = null,
-                    forService = service as CBService,
-                )
-            }
-        }
-
-        @ObjCSignatureOverride
-        override fun peripheral(
-            peripheral: CBPeripheral,
-            didDiscoverCharacteristicsForService: CBService,
-            error: NSError?,
-        ) {
-            val session =
-                sessions.getOrPut(peripheral.identifier.UUIDString) { PeripheralSession(peripheral) }
-
-            didDiscoverCharacteristicsForService.characteristics?.forEach { characteristicAny ->
-                val characteristic = characteristicAny as CBCharacteristic
-                logging.v {
-                    "  Discovered characteristic ${characteristic.UUID}  props=0x${
-                        characteristic.properties.toString(16)
-                    }"
-                }
-
-                // Cache remote-specific characteristics for IosBleGattPort
-                when (characteristic.UUID) {
-                    IosSonyBleConstants.REMOTE_CHARACTERISTIC_UUID_STRING ->
-                        session.remoteControlCharacteristic = characteristic
-
-                    IosSonyBleConstants.REMOTE_STATUS_UUID_STRING ->
-                        session.remoteStatusCharacteristic = characteristic
-                }
-
-                val supportsNotify =
-                    (characteristic.properties and CBCharacteristicPropertyNotify) != 0uL ||
-                            (characteristic.properties and CBCharacteristicPropertyIndicate) != 0uL
-                if (supportsNotify) {
-                    session.notifiableCharacteristics.add(characteristic)
-                }
-            }
-
-            // Subscribe to remote status updates early (optimization for iOS pairing flow)
-            //subscribeToRemoteStatusUpdates(session)
-
-            // Trigger pairing via notification subscription
-            if (session.phase == PeripheralPhase.Connected) {
-                val pairingTarget = session.notifiableCharacteristics.firstOrNull()
-                if (pairingTarget != null) {
-                    session.phase = PeripheralPhase.WaitingForPairing
-                    logging.d {
-                        "Subscribing to notifications on ${pairingTarget.UUID.UUIDString} to trigger pairing"
-                    }
-                    peripheral.setNotifyValue(true, forCharacteristic = pairingTarget)
-                    // proceedAfterPairing(session, peripheral)
-
-                } else {
-                    logging.d { "No notifiable characteristic – proceeding without explicit pairing" }
-                    proceedAfterPairing(session, peripheral)
-                }
-            }
-        }
-
-        @ObjCSignatureOverride
-        override fun peripheral(
-            peripheral: CBPeripheral,
-            didUpdateValueForCharacteristic: CBCharacteristic,
-            error: NSError?,
-        ) {
-            val session = sessions[peripheral.identifier.UUIDString] ?: return
-            logging.v { "Read value for ${didUpdateValueForCharacteristic.UUID.UUIDString} (error=${error?.code} / ${error?.localizedDescription})" }
-
-            if (isAuthenticationError(error)) {
-                retryAfterPairing(session) {
-                    peripheral.readValueForCharacteristic(didUpdateValueForCharacteristic)
-                }
-                return
-            }
-
-            val value = didUpdateValueForCharacteristic.value?.toByteArray() ?: return
-            session.pairingRetryCount = 0
-            val id = peripheral.identifier.UUIDString
-
-            // Route to shared coordinators based on characteristic UUID
-            when (didUpdateValueForCharacteristic.UUID) {
-                IosSonyBleConstants.READ_CHARACTERISTIC_UUID_STRING -> {
-                    bleSessionCoordinator.onCharacteristicRead(id, value, true)
-                }
-
-                IosSonyBleConstants.REMOTE_STATUS_UUID_STRING -> {
-                    bleSessionCoordinator.onCharacteristicChanged(
-                        id, SonyBluetoothConstants.REMOTE_STATUS_UUID, value,
-                    )
-                    refreshDeviceList()
-                }
-            }
-        }
-
-        @ObjCSignatureOverride
-        override fun peripheral(
-            peripheral: CBPeripheral,
-            didWriteValueForCharacteristic: CBCharacteristic,
-            error: NSError?,
-        ) {
-            val session = sessions[peripheral.identifier.UUIDString] ?: return
-            logging.v { "Write value for ${didWriteValueForCharacteristic.UUID.UUIDString} completed (error=${error?.code} / ${error?.localizedDescription})" }
-
-            if (isAuthenticationError(error)) {
-                retryAfterPairing(session) {
-                    // Restart the handshake after pairing
-                    session.phase = PeripheralPhase.Handshaking
-                    bleSessionCoordinator.beginHandshake(peripheral.identifier.UUIDString)
-                }
-                return
-            }
-
-            if (error != null) {
-                logging.e { "BLE write failed for ${didWriteValueForCharacteristic.UUID.UUIDString}: ${error.localizedDescription}" }
-                return
-            }
-
-            session.pairingRetryCount = 0
-            val id = peripheral.identifier.UUIDString
-
-            // Map iOS CBUUID to shared UUID string and forward to shared coordinator
-            when (didWriteValueForCharacteristic.UUID) {
-                IosSonyBleConstants.ENABLE_UNLOCK_GPS_UUID_STRING ->
-                    bleSessionCoordinator.onCharacteristicWrite(
-                        id, SonyBluetoothConstants.CHARACTERISTIC_ENABLE_UNLOCK_GPS_COMMAND, true,
-                    )
-
-                IosSonyBleConstants.ENABLE_LOCK_GPS_UUID_STRING ->
-                    bleSessionCoordinator.onCharacteristicWrite(
-                        id, SonyBluetoothConstants.CHARACTERISTIC_ENABLE_LOCK_GPS_COMMAND, true,
-                    )
-
-                IosSonyBleConstants.TIME_SYNC_CHARACTERISTIC_UUID_STRING ->
-                    bleSessionCoordinator.onCharacteristicWrite(
-                        id, SonyBluetoothConstants.TIME_SYNC_CHARACTERISTIC_UUID, true,
-                    )
-
-                IosSonyBleConstants.REMOTE_CHARACTERISTIC_UUID_STRING ->
-                    bleSessionCoordinator.onCharacteristicWrite(
-                        id, SonyBluetoothConstants.REMOTE_CHARACTERISTIC_UUID, true,
-                    )
-            }
-        }
-
-        @ObjCSignatureOverride
-        override fun peripheral(
-            peripheral: CBPeripheral,
-            didUpdateNotificationStateForCharacteristic: CBCharacteristic,
-            error: NSError?,
-        ) {
-            val session = sessions[peripheral.identifier.UUIDString] ?: return
-
-            // Remote status subscription result
-            if (didUpdateNotificationStateForCharacteristic.UUID == IosSonyBleConstants.REMOTE_STATUS_UUID_STRING) {
-                if (isAuthenticationError(error)) {
-                    retryAfterPairing(session) {
-                        peripheral.setNotifyValue(
-                            true,
-                            forCharacteristic = didUpdateNotificationStateForCharacteristic,
-                        )
-                    }
-                    return
-                }
-                if (error == null) {
-                    session.remoteStatusNotificationsEnabled = true
-                    logging.i { "Subscribed to remote status notifications for ${peripheral.identifier.UUIDString}" }
-                } else {
-                    logging.w { "Remote status notification subscription failed: ${error.localizedDescription}" }
-                }
-                // only return if we're already active, otherwise let the handshake proceed
-                if (session.phase !== PeripheralPhase.WaitingForPairing) {
-                    return
-                }
-            }
-
-            // Pairing result
-            if (session.phase != PeripheralPhase.WaitingForPairing) return
-            logging.d { "Notification subscription result for ${didUpdateNotificationStateForCharacteristic.UUID.UUIDString}: error=${error?.code}" }
-
-            if (isAuthenticationError(error)) {
-                retryAfterPairing(session) {
-                    peripheral.setNotifyValue(
-                        true,
-                        forCharacteristic = didUpdateNotificationStateForCharacteristic,
-                    )
-                }
-                return
-            }
-
-            session.pairingRetryCount = 0
-
-            if (error != null) {
-                logging.d { "Notification subscription failed (non-auth): ${error.localizedDescription} – continuing" }
-            } else {
-                logging.d { "Notification subscription succeeded – device is paired" }
-                peripheral.setNotifyValue(
-                    false,
-                    forCharacteristic = didUpdateNotificationStateForCharacteristic,
-                )
-            }
-
-            proceedAfterPairing(session, peripheral)
+            orchestrator.locationManager.isActive.collect { refreshDeviceList() }
         }
     }
 
     // ---------------------------------------------------------------------------
     // CoreBluetooth central delegate
     // ---------------------------------------------------------------------------
-    private val delegate = object : NSObject(), CBCentralManagerDelegateProtocol {
+    private val delegate: CBCentralManagerDelegateProtocol =
+        object : NSObject(), CBCentralManagerDelegateProtocol {
 
         override fun centralManagerDidUpdateState(central: CBCentralManager) {
             if (central.state == CBManagerStatePoweredOn) {
                 if (!appEnabled) {
                     stopScanIfNeeded()
                     cancelAllKnownConnections()
+                    controllerScope.launch {
+                        autoReconnectStore.loadFromDisk()
+                        migrateLegacyDevicesToDatabase()
+                        syncPersistedDevices()
+                    }
                     refreshDeviceList()
                     return
                 }
@@ -486,17 +215,12 @@ object IosBluetoothController : BluetoothController {
                         }
 
                         discovered[id] = peripheral
-                        peripheral.delegate = peripheralDelegate
                         if (peripheral.state == CBPeripheralStateConnected) {
                             connected[id] = peripheral
-                            sessions.getOrPut(id) { PeripheralSession(peripheral) }
-                            peripheral.discoverServices(
-                                listOf(
-                                    IosSonyBleConstants.LOCATION_SERVICE_UUID,
-                                    IosSonyBleConstants.CONTROL_SERVICE_UUID_STRING,
-                                    IosSonyBleConstants.REMOTE_SERVICE_UUID,
-                                )
-                            )
+                            // The orchestrator drives service discovery + handshake
+                            transport.attachPeripheral(peripheral)
+                        } else {
+                            transport.registerPeripheral(peripheral)
                         }
                         refreshDeviceList()
                     }
@@ -536,15 +260,8 @@ object IosBluetoothController : BluetoothController {
             val id = didConnectPeripheral.identifier.UUIDString
             connected[id] = didConnectPeripheral
             autoReconnectStore.add(id)
-            sessions.getOrPut(id) { PeripheralSession(didConnectPeripheral) }
-            didConnectPeripheral.delegate = peripheralDelegate
-            didConnectPeripheral.discoverServices(
-                listOf(
-                    IosSonyBleConstants.LOCATION_SERVICE_UUID,
-                    IosSonyBleConstants.CONTROL_SERVICE_UUID_STRING,
-                    IosSonyBleConstants.REMOTE_SERVICE_UUID,
-                )
-            )
+            // The orchestrator drives service discovery + handshake from here
+            transport.attachPeripheral(didConnectPeripheral)
             connectCallbacks.remove(id)?.invoke(true)
             refreshDeviceList()
         }
@@ -572,23 +289,22 @@ object IosBluetoothController : BluetoothController {
         ) {
             val id = didDisconnectPeripheral.identifier.UUIDString
             connected.remove(id)
-            sessions.remove(id)
             connectCallbacks.remove(id)?.invoke(false)
             disconnectCallbacks.remove(id)?.invoke()
-            bleSessionCoordinator.clearSession(id)
+            // Emits Disconnected → orchestrator clears the session, cancels queued
+            // operations and re-evaluates location tracking
+            transport.detachPeripheral(id)
 
             controllerScope.launch {
                 if (shouldAutoReconnect(id)) {
                     central.connectPeripheral(didDisconnectPeripheral, options = null)
                 }
             }
-
-            locationTransmissionManager.updateLocationTracking()
             refreshDeviceList()
         }
     }
 
-    private val central = CBCentralManager(
+    private val central: CBCentralManager = CBCentralManager(
         delegate = delegate,
         queue = null,
         options = mapOf(CBCentralManagerOptionRestoreIdentifierKey to "com.saschl.cameragps.central"),
@@ -646,9 +362,7 @@ object IosBluetoothController : BluetoothController {
         val peripheral = connected[resolvedIdentifier] ?: discovered[resolvedIdentifier] ?: return
         if (central.state != CBManagerStatePoweredOn) {
             connected.remove(resolvedIdentifier)
-            sessions.remove(resolvedIdentifier)
-            bleSessionCoordinator.clearSession(resolvedIdentifier)
-            locationTransmissionManager.updateLocationTracking()
+            transport.detachPeripheral(resolvedIdentifier)
             refreshDeviceList()
             return
         }
@@ -669,26 +383,32 @@ object IosBluetoothController : BluetoothController {
         disconnect(identifier)
         discovered.remove(resolvedIdentifier)
         connected.remove(resolvedIdentifier)
-        sessions.remove(resolvedIdentifier)
+        transport.detachPeripheral(resolvedIdentifier)
         deviceEnabledOverrides.remove(normalized)
         persistedDevices.remove(normalized)
         deviceDao.deleteDevice(CameraDevice(mac = normalized))
         refreshDeviceList()
     }
 
-    fun triggerRemoteShutter(identifier: String): Boolean {
-        val session = sessions[identifier] ?: return false
-        if (session.phase != PeripheralPhase.Ready) return false
-        return bleSessionCoordinator.triggerRemoteShutter(identifier)
+    fun triggerRemoteShutter(identifier: String): Boolean =
+        sendRemoteCommand(identifier, RemoteCommand.ShutterFullPress)
+
+    /** Send a remote-control command to a camera whose handshake is complete. */
+    fun sendRemoteCommand(identifier: String, command: RemoteCommand): Boolean {
+        val session = orchestrator.registry.get(identifier) ?: return false
+        if (session.phase != BleSessionPhase.Transmitting) return false
+        return orchestrator.sendRemoteCommand(identifier, command)
+    }
+
+    /** Run a full shutter cycle (half press → focus delay → full press → releases). */
+    fun triggerShutterSequence(identifier: String): Boolean {
+        val session = orchestrator.registry.get(identifier) ?: return false
+        if (session.phase != BleSessionPhase.Transmitting) return false
+        return orchestrator.triggerShutterSequence(identifier)
     }
 
     fun setRemoteStatusMonitoringEnabled(identifier: String, enabled: Boolean) {
-        val normalized = identifier.uppercase()
-        if (enabled) {
-            remoteControlCoordinator.startRemoteStatusMonitoring(normalized)
-        } else {
-            remoteControlCoordinator.cancelProbe(normalized)
-        }
+        orchestrator.setRemoteMonitoring(identifier, enabled)
     }
 
     fun applyDeviceEnabledState(identifier: String, enabled: Boolean) {
@@ -699,7 +419,7 @@ object IosBluetoothController : BluetoothController {
                 ?: CameraDevice(mac = normalized, deviceEnabled = enabled)
 
         if (!enabled) {
-            remoteControlCoordinator.cancelProbe(normalized)
+            orchestrator.setRemoteMonitoring(normalized, false)
             controllerScope.launch {
                 disconnectInternal(identifier, removeFromAutoReconnect = false)
             }
@@ -718,49 +438,11 @@ object IosBluetoothController : BluetoothController {
         if (enabled) {
             startScan()
             reconnectToPersistedPeripherals()
-            locationTransmissionManager.updateLocationTracking()
+            orchestrator.locationManager.updateTracking()
             refreshDeviceList()
             return
         }
         forceShutdownAllConnections()
-    }
-
-    // ---------------------------------------------------------------------------
-    // iOS-specific pairing helpers
-    // ---------------------------------------------------------------------------
-
-    private fun isAuthenticationError(error: NSError?): Boolean {
-        if (error == null) return false
-        return error.code == IosSonyBleConstants.ATT_ERROR_INSUFFICIENT_AUTHENTICATION ||
-                error.code == IosSonyBleConstants.ATT_ERROR_INSUFFICIENT_ENCRYPTION
-    }
-
-    private fun retryAfterPairing(session: PeripheralSession, operation: () -> Unit) {
-        if (session.pairingRetryCount >= IosSonyBleConstants.MAX_PAIRING_RETRIES) {
-            logging.e { "Pairing failed after ${IosSonyBleConstants.MAX_PAIRING_RETRIES} retries, disconnecting" }
-            if (central.state == CBManagerStatePoweredOn) {
-                central.cancelPeripheralConnection(session.peripheral)
-            }
-            return
-        }
-        session.pairingRetryCount++
-        session.phase = PeripheralPhase.WaitingForPairing
-        logging.d { "Auth error – retrying in ${IosSonyBleConstants.PAIRING_RETRY_DELAY_MS}ms (attempt ${session.pairingRetryCount}/${IosSonyBleConstants.MAX_PAIRING_RETRIES})" }
-        controllerScope.launch {
-            delay(IosSonyBleConstants.PAIRING_RETRY_DELAY_MS)
-            operation()
-        }
-    }
-
-    private fun proceedAfterPairing(session: PeripheralSession, peripheral: CBPeripheral) {
-        session.phase = PeripheralPhase.Handshaking
-        bleSessionCoordinator.beginHandshake(peripheral.identifier.UUIDString)
-    }
-
-    private fun subscribeToRemoteStatusUpdates(session: PeripheralSession) {
-        val statusCharacteristic = session.remoteStatusCharacteristic ?: return
-        if (session.remoteStatusNotificationsEnabled) return
-        session.peripheral.setNotifyValue(true, forCharacteristic = statusCharacteristic)
     }
 
     // ---------------------------------------------------------------------------
@@ -770,7 +452,8 @@ object IosBluetoothController : BluetoothController {
     private fun forceShutdownAllConnections() {
         stopScanIfNeeded()
         cancelAllKnownConnections()
-        bleSessionCoordinator.clearAllSessions()
+        orchestrator.shutdownAll()
+        transport.detachAll()
 
         connectCallbacks.values.forEach { it(false) }
         connectCallbacks.clear()
@@ -778,9 +461,6 @@ object IosBluetoothController : BluetoothController {
         disconnectCallbacks.clear()
 
         connected.clear()
-        sessions.clear()
-
-        locationTransmissionManager.shutdown()
 
         refreshDeviceList()
     }
@@ -790,7 +470,6 @@ object IosBluetoothController : BluetoothController {
         val peripherals = mutableMapOf<String, CBPeripheral>()
         connected.forEach { (id, p) -> peripherals[id] = p }
         discovered.forEach { (id, p) -> peripherals[id] = p }
-        sessions.forEach { (id, s) -> peripherals[id] = s.peripheral }
         peripherals.values.forEach { central.cancelPeripheralConnection(it) }
     }
 
@@ -806,6 +485,7 @@ object IosBluetoothController : BluetoothController {
 
     private suspend fun reconnectToPersistedPeripherals() {
         autoReconnectStore.loadFromDisk()
+        migrateLegacyDevicesToDatabase()
         syncPersistedDevices()
         val ids = autoReconnectStore.getAll()
         if (ids.isEmpty()) return
@@ -836,7 +516,8 @@ object IosBluetoothController : BluetoothController {
         val persistedByNormalized = persistedDevices
         val discoveredByNormalized = discovered.entries.associateBy { it.key.uppercase() }
         val connectedByNormalized = connected.keys.associateBy { it.uppercase() }
-        val sessionsByNormalized = sessions.entries.associateBy { it.key.uppercase() }
+        val sessionsByNormalized = orchestrator.sessions.value
+        val transmissionActive = orchestrator.locationManager.isActive.value
         val allIdentifiers = LinkedHashSet<String>()
         allIdentifiers.addAll(discoveredByNormalized.keys)
         allIdentifiers.addAll(persistedByNormalized.keys)
@@ -847,7 +528,7 @@ object IosBluetoothController : BluetoothController {
                 val persistedEntry = persistedByNormalized[normalizedId]
                 val peripheral = discoveredEntry?.value
                 val identifier = discoveredEntry?.key ?: (persistedEntry?.mac ?: normalizedId)
-                val session = sessionsByNormalized[normalizedId]?.value
+                val session = sessionsByNormalized[normalizedId]
                 BluetoothDeviceInfo(
                     identifier = identifier,
                     name = peripheral?.name ?: persistedEntry?.deviceName ?: "Unknown device",
@@ -856,8 +537,7 @@ object IosBluetoothController : BluetoothController {
                             autoReconnectStore.contains(normalizedId) ||
                             persistedEntry != null,
                     isTransmissionActive =
-                        session?.phase == PeripheralPhase.Ready &&
-                                locationTransmissionManager.isLocationUpdatesStarted,
+                        session?.phase == BleSessionPhase.Transmitting && transmissionActive,
                     isRemoteFeatureActive = session?.remoteFeatureActive == true,
                 )
             }
@@ -879,17 +559,60 @@ object IosBluetoothController : BluetoothController {
         val normalized = identifier.uppercase()
         deviceEnabledOverrides[normalized]?.let { return it }
 
-        val enabled = deviceDao.isDeviceEnabled(normalized)
-        deviceEnabledOverrides[normalized] = enabled
-        return enabled
+        val enabled = deviceDao.findDeviceEnabled(normalized)
+        if (enabled != null) {
+            deviceEnabledOverrides[normalized] = enabled
+            return enabled
+        }
+        // No record yet: devices saved by pre-database versions only exist in
+        // NSUserDefaults until migrateLegacyDevicesToDatabase runs at power-on
+        // (state restoration can reach this earlier). They were always enabled.
+        return true
     }
 
     private fun resolveKnownIdentifier(identifier: String): String {
         val normalized = identifier.uppercase()
         return connected.keys.firstOrNull { it.uppercase() == normalized }
             ?: discovered.keys.firstOrNull { it.uppercase() == normalized }
-            ?: sessions.keys.firstOrNull { it.uppercase() == normalized }
             ?: identifier
+    }
+
+    /**
+     * Older app versions persisted saved devices only as peripheral UUIDs in
+     * NSUserDefaults ([IosAutoReconnectStore]). Seed a database record for any
+     * persisted peripheral that has none, so those devices keep their saved
+     * state, name and toggles after the upgrade. Idempotent; a no-op once every
+     * persisted peripheral has a record. Requires [autoReconnectStore] to be
+     * loaded from disk.
+     */
+    private suspend fun migrateLegacyDevicesToDatabase() {
+        val ids = autoReconnectStore.getAll()
+        if (ids.isEmpty()) return
+
+        val knownMacs = deviceDao.getAllCameraDevices().mapTo(mutableSetOf()) { it.mac.uppercase() }
+        val missing = ids.filterNot { it.uppercase() in knownMacs }
+        if (missing.isEmpty()) return
+
+        val namesByNormalizedId = if (central.state == CBManagerStatePoweredOn) {
+            central.retrievePeripheralsWithIdentifiers(missing.map { NSUUID(uUIDString = it) })
+                .filterIsInstance<CBPeripheral>()
+                .associate { it.identifier.UUIDString.uppercase() to it.name }
+        } else {
+            emptyMap()
+        }
+
+        missing.forEach { id ->
+            val normalized = id.uppercase()
+            deviceDao.insertDevice(
+                CameraDevice(
+                    mac = normalized,
+                    deviceEnabled = true,
+                    deviceName = namesByNormalizedId[normalized] ?: "N/A",
+                    remoteControlEnabled = false,
+                )
+            )
+            logging.i { "Migrated legacy saved device $normalized to the device database" }
+        }
     }
 
     private suspend fun syncPersistedDevices() {
@@ -925,71 +648,5 @@ object IosBluetoothController : BluetoothController {
             persistedDevices[normalized]?.copy(deviceName = resolvedName) ?: entry
         refreshDeviceList()
         syncPersistedDevices()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// iOS-specific session state
-// ---------------------------------------------------------------------------
-
-private enum class PeripheralPhase {
-    Connected,
-    WaitingForPairing,
-    Handshaking,
-    Ready,
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private data class PeripheralSession(
-    override val peripheral: CBPeripheral,
-    override var remoteControlCharacteristic: CBCharacteristic? = null,
-    override var remoteStatusCharacteristic: CBCharacteristic? = null,
-    override var remoteStatusNotificationsEnabled: Boolean = false,
-    override var remoteFeatureActive: Boolean = false,
-    var phase: PeripheralPhase = PeripheralPhase.Connected,
-    var pairingRetryCount: Int = 0,
-    val notifiableCharacteristics: MutableList<CBCharacteristic> = mutableListOf(),
-) : IosBleGattPort.IosBleSession
-
-private object IosSonyBleConstants {
-    val LOCATION_SERVICE_UUID = CBUUID.UUIDWithString(SonyBluetoothConstants.SERVICE_UUID)
-    val CONTROL_SERVICE_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.CONTROL_SERVICE_UUID)
-    val READ_CHARACTERISTIC_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.CHARACTERISTIC_READ_UUID)
-    val ENABLE_UNLOCK_GPS_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.CHARACTERISTIC_ENABLE_UNLOCK_GPS_COMMAND)
-    val ENABLE_LOCK_GPS_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.CHARACTERISTIC_ENABLE_LOCK_GPS_COMMAND)
-    val TIME_SYNC_CHARACTERISTIC_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.TIME_SYNC_CHARACTERISTIC_UUID)
-    val REMOTE_SERVICE_UUID =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.REMOTE_SERVICE_UUID)
-    val REMOTE_CHARACTERISTIC_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.REMOTE_CHARACTERISTIC_UUID)
-    val REMOTE_STATUS_UUID_STRING =
-        CBUUID.UUIDWithString(SonyBluetoothConstants.REMOTE_STATUS_UUID)
-
-    const val ATT_ERROR_INSUFFICIENT_AUTHENTICATION = 5L
-    const val ATT_ERROR_INSUFFICIENT_ENCRYPTION = 15L
-    const val MAX_PAIRING_RETRIES = 3
-    const val PAIRING_RETRY_DELAY_MS = 3_000L
-}
-
-
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private fun ByteArray.toNSData(): NSData = usePinned {
-    NSData.create(bytes = it.addressOf(0), length = size.toULong())
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private fun NSData.toByteArray(): ByteArray {
-    val size = length.toInt()
-    if (size == 0) return ByteArray(0)
-
-    return ByteArray(size).apply {
-        usePinned { pinned ->
-            memcpy(pinned.addressOf(0), bytes, length)
-        }
     }
 }
