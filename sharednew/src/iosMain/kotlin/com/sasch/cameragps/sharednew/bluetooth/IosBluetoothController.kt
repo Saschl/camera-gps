@@ -168,6 +168,9 @@ object IosBluetoothController : BluetoothController {
         },
     )
 
+    fun hasPreciseAccuracyAuthorization(): Boolean =
+        locationTransmissionManager.hasPreciseAccuracyAuthorization()
+
     init {
         controllerScope.launch {
             syncPersistedDevices()

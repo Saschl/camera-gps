@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import platform.CoreLocation.CLAccuracyAuthorization
 import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
@@ -110,10 +111,16 @@ internal class IosLocationTransmissionManager(
         }
     }
 
+    fun hasPreciseAccuracyAuthorization(): Boolean {
+        return locationManager.accuracyAuthorization() == CLAccuracyAuthorization.CLAccuracyAuthorizationFullAccuracy
+    }
+
+
+
     private val locationManager = CLLocationManager().apply {
         delegate = locationDelegate
         desiredAccuracy = platform.CoreLocation.kCLLocationAccuracyBest
-        distanceFilter = 10.0
+        distanceFilter = 2.0
         pausesLocationUpdatesAutomatically = false
         allowsBackgroundLocationUpdates = true
     }
