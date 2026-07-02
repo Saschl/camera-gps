@@ -15,14 +15,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.baseline_view_list_24
+import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.donation_dialog_confirm
 import cameragps.sharednew.generated.resources.donation_dialog_dismiss
 import cameragps.sharednew.generated.resources.donation_dialog_message
 import cameragps.sharednew.generated.resources.donation_dialog_title
 import cameragps.sharednew.generated.resources.header_device_list
 import cameragps.sharednew.generated.resources.info_24px
+import cameragps.sharednew.generated.resources.open_location_settings
+import cameragps.sharednew.generated.resources.open_settings_for_precise_location
+import cameragps.sharednew.generated.resources.precise_location
 import cameragps.sharednew.generated.resources.settings
 import cameragps.sharednew.generated.resources.settings_24px
 import cameragps.sharednew.generated.resources.view_logs
@@ -45,9 +51,11 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIApplicationState.UIApplicationStateActive
 
 internal enum class IosScreen {
@@ -65,6 +73,7 @@ internal fun CameraGpsIosApp() {
     val realDevices by bluetoothController.devices.collectAsState()
     val devices = if (SCREENSHOT_MODE) mockDevices else realDevices
     val scope = rememberCoroutineScope()
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val logRepository = remember { LogRepository(getDatabaseBuilder()) }
     var currentScreen by remember {
         mutableStateOf(
@@ -79,6 +88,7 @@ internal fun CameraGpsIosApp() {
         )
     }
     var showDonationDialog by remember { mutableStateOf(false) }
+    var showRequestPreciseAccuracyPermissionDialog by remember { mutableStateOf(false) }
     var scrollToTipJarOnSettingsOpen by remember { mutableStateOf(false) }
     var forceDonationDialogThisLaunch by remember { mutableStateOf(false) }
     var selectedDeviceIdentifier by remember { mutableStateOf<String?>(null) }
@@ -114,6 +124,19 @@ internal fun CameraGpsIosApp() {
             )
         )
         forceDonationDialogThisLaunch = IosAppPreferences.consumeForceDonationDialogOnNextAppStart()
+    }
+
+    LaunchedEffect(lifecycleState) {
+        when (lifecycleState) {
+            Lifecycle.State.RESUMED -> {
+                if (!bluetoothController.hasPreciseAccuracyAuthorization()) {
+                    showRequestPreciseAccuracyPermissionDialog = true
+                }
+            }
+
+            else -> {}
+        }
+
     }
     LaunchedEffect(currentScreen, isAppEnabled, autoScanEnabled, isAppInForeground) {
         if (SCREENSHOT_MODE) return@LaunchedEffect
@@ -310,6 +333,39 @@ internal fun CameraGpsIosApp() {
                 TextButton(onClick = { showDonationDialog = false }) {
                     Text(text = stringResource(Res.string.donation_dialog_dismiss))
                 }
+            }
+        )
+    }
+    if (showRequestPreciseAccuracyPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showDonationDialog = false },
+            title = { Text(text = stringResource(Res.string.precise_location)) },
+            text = { Text(text = stringResource(Res.string.open_settings_for_precise_location)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRequestPreciseAccuracyPermissionDialog = false
+                        val settingsUrl = NSURL.URLWithString(UIApplicationOpenSettingsURLString)
+
+                        if (settingsUrl != null && UIApplication.sharedApplication.canOpenURL(
+                                settingsUrl
+                            )
+                        ) {
+                            UIApplication.sharedApplication.openURL(
+                                settingsUrl,
+                                emptyMap<Any?, Any>(),
+                                {})
+                        }
+                    }
+                ) {
+                    Text(text = stringResource(Res.string.open_location_settings))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRequestPreciseAccuracyPermissionDialog = false }) {
+                    Text(text = stringResource(Res.string.cancel_button))
+                }
+
             }
         )
     }

@@ -32,7 +32,7 @@ kotlin {
                 minorApiLevel = 1
             }
         }
-        minSdk = 26
+        minSdk = 24
 
         withHostTestBuilder {
         }
@@ -95,6 +95,8 @@ kotlin {
                 implementation(libs.logging)
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.androidx.lifecycle.viewmodel)
+                implementation(libs.lifecycle.runtime.compose)
+
 
             }
         }

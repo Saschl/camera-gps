@@ -13,5 +13,8 @@
     <string name="enable_pairing_mode_title">Enable Pairing Mode</string>
     <string name="enable_pairing_mode_message">If this is the first time connecting this camera to your phone, please make sure to enable Bluetooth pairing mode in your camera's settings before continuing. If this is not the case, simply continue</string>
     <string name="enable_pairing_mode_continue">Continue</string>
+    <string name="precise_location">Precise Location authorization needed</string>
+    <string name="open_settings_for_precise_location">For the app to function as intended, you need to allow precise location. Open the settings via the button and enable precise location in the settings. </string>
+
 </resources>
 

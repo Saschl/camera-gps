@@ -13,5 +13,9 @@
     <string name="enable_pairing_mode_title">Kopplungsmodus aktivieren</string>
     <string name="enable_pairing_mode_message">Wenn du diese Kamera zum ersten Mal mit deinem Telefon verbindest, aktiviere bitte den Bluetooth-Kopplungsmodus in den Kameraeinstellungen, bevor du fortfaehrst. Wenn das nicht der Fall ist, kannst du einfach fortfahren.</string>
     <string name="enable_pairing_mode_continue">Weiter</string>
+
+    <string name="precise_location">Zugriff auf genauen Standort erlauben</string>
+    <string name="open_settings_for_precise_location">Damit die App korrekt funktioniert, ist der Zugriff auf den genauen Standort notwendig. Öffne die Einstellungen, gehe zu "Ort" und erlaube den Zugriff auf den genauen Standort</string>
+
 </resources>
 

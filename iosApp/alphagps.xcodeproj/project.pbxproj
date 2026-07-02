@@ -304,7 +304,7 @@
 				CODE_SIGN_ENTITLEMENTS = alphagps/alphagps.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 6T589MK27K;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -313,9 +313,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Alpha GPS";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app needs access to Bluetooth to connect to your connected cameras and transmit ";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app needs access to Bluetooth to connect to your cameras and transmit location data for geotagging your photos.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos, even when the phone is locked.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs constant access to location services to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos. Select \"Always\" to enable geotagging in the background.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -325,7 +325,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saschl.cameragps;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -352,7 +352,7 @@
 				CODE_SIGN_ENTITLEMENTS = alphagps/alphagps.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 6T589MK27K;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -361,9 +361,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Alpha GPS";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app needs access to Bluetooth to connect to your connected cameras and transmit ";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app needs access to Bluetooth to connect to your cameras and transmit location data for geotagging your photos.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos, even when the phone is locked.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app uses your location to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app needs constant access to location services to send GPS coordinates to your connected camera, enabling automatic geotagging of your photos. Select \"Always\" to enable geotagging in the background.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -373,7 +373,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saschl.cameragps;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
