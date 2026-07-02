@@ -217,10 +217,6 @@ object IosBluetoothController : BluetoothController {
                         discovered[id] = peripheral
                         if (peripheral.state == CBPeripheralStateConnected) {
                             connected[id] = peripheral
-                            // The orchestrator drives service discovery + handshake
-                            transport.attachPeripheral(peripheral)
-                        } else {
-                            transport.registerPeripheral(peripheral)
                         }
                         refreshDeviceList()
                     }

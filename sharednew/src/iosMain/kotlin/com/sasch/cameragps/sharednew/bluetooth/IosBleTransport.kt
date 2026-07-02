@@ -178,6 +178,7 @@ internal class IosBleTransport(
         handle.characteristicsByUuid.clear()
         handle.notifiableCharacteristics.clear()
         handle.discovery = DiscoveryState()
+        log.d { "Initiating service discovery for ${identifier.uppercase()}" }
         handle.peripheral.discoverServices(
             listOf(
                 LOCATION_SERVICE_UUID,
@@ -201,6 +202,7 @@ internal class IosBleTransport(
             val discovery = handle.discovery ?: return
 
             val services = peripheral.services.orEmpty()
+            log.d { "Discovered ${services.size} services for $id" }
             if (didDiscoverServices != null || services.isEmpty()) {
                 log.e { "Service discovery failed for $id: ${didDiscoverServices?.localizedDescription ?: "no services"}" }
                 handle.discovery = null
