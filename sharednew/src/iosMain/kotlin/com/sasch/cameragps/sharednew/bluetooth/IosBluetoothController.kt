@@ -31,6 +31,7 @@ import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
 import platform.CoreBluetooth.CBCentralManagerOptionRestoreIdentifierKey
 import platform.CoreBluetooth.CBCentralManagerRestoredStatePeripheralsKey
+import platform.CoreBluetooth.CBConnectPeripheralOptionEnableAutoReconnect
 import platform.CoreBluetooth.CBConnectPeripheralOptionNotifyOnConnectionKey
 import platform.CoreBluetooth.CBManagerStatePoweredOn
 import platform.CoreBluetooth.CBPeripheral
@@ -270,17 +271,19 @@ object IosBluetoothController : BluetoothController {
         ) {
             val id = didFailToConnectPeripheral.identifier.UUIDString
             connectCallbacks.remove(id)?.invoke(false)
-            controllerScope.launch {
-                if (shouldAutoReconnect(id)) {
-                    central.connectPeripheral(didFailToConnectPeripheral, options = null)
-                }
-            }
+            /* controllerScope.launch {
+                 if (shouldAutoReconnect(id)) {
+                     central.connectPeripheral(didFailToConnectPeripheral, options = null)
+                 }
+             }*/
         }
 
         @ObjCSignatureOverride
         override fun centralManager(
             central: CBCentralManager,
             didDisconnectPeripheral: CBPeripheral,
+            timestamp: Double,
+            isReconnecting: Boolean,
             error: NSError?,
         ) {
             val id = didDisconnectPeripheral.identifier.UUIDString
@@ -292,9 +295,9 @@ object IosBluetoothController : BluetoothController {
             transport.detachPeripheral(id)
 
             controllerScope.launch {
-                if (shouldAutoReconnect(id)) {
-                    central.connectPeripheral(didDisconnectPeripheral, options = null)
-                }
+                /*  if (shouldAutoReconnect(id)) {
+                      central.connectPeripheral(didDisconnectPeripheral, options = null)
+                  }*/
             }
             refreshDeviceList()
         }
@@ -335,7 +338,10 @@ object IosBluetoothController : BluetoothController {
             connectCallbacks[resolvedIdentifier] = { success ->
                 if (cont.isActive) cont.resume(success)
             }
-            central.connectPeripheral(peripheral, options = null)
+            central.connectPeripheral(
+                peripheral,
+                options = mapOf(CBConnectPeripheralOptionEnableAutoReconnect to true)
+            )
             cont.invokeOnCancellation {
                 connectCallbacks.remove(resolvedIdentifier)
                 if (central.state == CBManagerStatePoweredOn) {
@@ -497,7 +503,10 @@ object IosBluetoothController : BluetoothController {
             if (!connected.containsKey(id)) {
                 central.connectPeripheral(
                     peripheral,
-                    options = mapOf(CBConnectPeripheralOptionNotifyOnConnectionKey to true),
+                    options = mapOf(
+                        CBConnectPeripheralOptionNotifyOnConnectionKey to true,
+                        CBConnectPeripheralOptionEnableAutoReconnect to true
+                    ),
                 )
             }
         }

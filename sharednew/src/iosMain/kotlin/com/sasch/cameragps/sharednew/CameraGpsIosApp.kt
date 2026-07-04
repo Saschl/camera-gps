@@ -234,6 +234,7 @@ internal fun CameraGpsIosApp() {
                             }
                         }
                     },
+                    // FIXME migration on ios makes device non deletable as migration keeps running i guess
                     onTriggerRemoteShutter = { device ->
                         scope.launch {
                             bluetoothController.triggerShutterSequence(device.identifier)
