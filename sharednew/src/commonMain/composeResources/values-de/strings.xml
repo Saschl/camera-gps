@@ -229,4 +229,50 @@
     <string name="donation_dialog_message">Falls die App dich beim Fotografieren unterstützt, würde ich mich über eine kleine Spende freuen. Das ist natürlich komplett optional, unterstützt jedoch die Weiterentwicklung.</string>
     <string name="donation_dialog_confirm">Unterstütze das Projekt</string>
     <string name="donation_dialog_dismiss">Nicht jetzt</string>
+    <string name="enable_remote_control">Fernbedienung aktivieren</string>
+    <!-- Troubleshooting guide (visual step-by-step screen, shared by both platforms) -->
+    <string name="guide_title">Fehlerbehebung</string>
+    <string name="guide_intro">Schritt-für-Schritt-Lösungen für die häufigsten Probleme.</string>
+    <string name="guide_open_button">Fehlerbehebung öffnen</string>
+    <string name="guide_location_link_title">Standort- und Zeitzonen-Verknüpfung aktivieren (ältere Kameras)</string>
+    <string name="guide_location_link_description">Bei Kameras mit dem älteren Menü-Layout (z. B. α6400, ZV-E10, α6100, α7 III) muss die Standortverknüpfung manuell eingeschaltet werden. Neuere Kameras aktivieren sie automatisch, sobald sich die App verbindet.</string>
+    <string name="guide_location_link_step_enable">Aktiviere an der Kamera die Standortverknüpfung:</string>
+    <string name="guide_location_link_step_enable_path">MENU → Netzwerk → Standortinfo-Verkn. → Standortinfo-Verknüpfung → Ein</string>
+    <string name="guide_location_link_step_time">Um auch Uhrzeit und Zeitzone vom Telefon zu übernehmen, aktiviere im selben Menü beide Optionen:</string>
+    <string name="guide_location_link_step_time_path">Uhrzeit autom. einst. → Ein • Ber. autom. anpass. → Ein</string>
+    <string name="guide_location_link_step_remote_note">Sind die Menüpunkte ausgegraut oder funktioniert die Verknüpfung weiterhin nicht, schalte die Bluetooth-Fernbedienung aus — siehe Abschnitt 3.</string>
+    <string name="guide_link_location_a6400">Sony-Hilfe: Standortinfo-Verknüpfung (α6400)</string>
+    <string name="guide_link_location_zve10">Sony-Hilfe: Standortinfo-Verknüpfung (ZV-E10)</string>
+    <string name="guide_repair_title">Kamera verbindet sich, aber GPS funktioniert nicht</string>
+    <string name="guide_repair_description">Typisch, wenn die Kamera zuvor mit Sonys Creators' App oder Imaging Edge Mobile eingerichtet war: Das Telefon ist bereits mit der Kamera gekoppelt, daher wird keine neue Kopplung angefragt — die Standortübertragung funktioniert mit Alpha GPS aber nicht richtig. Das Entfernen der alten Kopplung überall behebt das Problem.</string>
+    <string name="guide_repair_step_phone">Entferne die Kamera aus den Bluetooth-Einstellungen deines Telefons:</string>
+    <string name="guide_repair_step_phone_path_android">Einstellungen → Verbundene Geräte (Bluetooth) → deine Kamera → Entfernen</string>
+    <string name="guide_repair_step_phone_path_ios">Einstellungen → Bluetooth → ⓘ neben der Kamera → Dieses Gerät ignorieren</string>
+    <string name="guide_repair_step_camera">Lösche an der Kamera die alte Kopplung (ältere Modelle haben diesen Menüpunkt nicht — dort ersetzt eine neue Kopplung einfach die alte):</string>
+    <string name="guide_repair_step_camera_path">MENU → Netzwerk → Bluetooth → Gekopp. Gerät verwalten</string>
+    <string name="guide_repair_step_sony_app">Falls noch eine Sony-App installiert ist, entferne die Kamera auch dort:</string>
+    <string name="guide_repair_step_sony_app_path">Creators' App → Kameras → Einrichtung → Kopplung aufheben</string>
+    <string name="guide_repair_step_pair_again">Richte die Kamera anschließend neu in Alpha GPS ein: Versetze sie in den Kopplungsmodus und starte eine neue Suche.</string>
+    <string name="guide_remote_title">Bluetooth-Fernbedienung ausschalten (ältere Kameras)</string>
+    <string name="guide_remote_description">Kameras wie die α6400 können Bluetooth-Fernbedienung und Standortverknüpfung nicht gleichzeitig nutzen — ist die Fernbedienung eingeschaltet, bricht die Verbindung oder GPS-Übertragung ab. Neuere Modelle (z. B. α7 IV und neuer) unterstützen beides.</string>
+    <string name="guide_remote_step_camera">Schalte an der Kamera die Bluetooth-Fernbedienung aus:</string>
+    <string name="guide_remote_step_camera_path">MENU → Netzwerk → Bluetooth-Fernbed. → Aus</string>
+    <string name="guide_remote_step_app">Tippe in Alpha GPS auf dem Hauptbildschirm auf die Kamera und deaktiviere 'Fernbedienung aktivieren'.</string>
+    <string name="guide_link_remote_a6400">Sony-Hilfe: Bluetooth-Fernbedienung (α6400)</string>
+    <string name="guide_accuracy_title">Standort ist ungenau oder veraltet</string>
+    <string name="guide_accuracy_description">Werden Fotos mit einer deutlich abweichenden Position versehen, darf die App meist nicht den genauen Standort verwenden.</string>
+    <string name="guide_accuracy_step_precise">Erlaube Alpha GPS den genauen Standort:</string>
+    <string name="guide_accuracy_step_precise_path_android">Einstellungen → Apps → Alpha GPS → Berechtigungen → Standort → Genauen Standort verwenden</string>
+    <string name="guide_accuracy_step_precise_path_ios">Einstellungen → Datenschutz &amp; Sicherheit → Ortungsdienste → Alpha GPS → Genauer Standort → Ein</string>
+    <string name="guide_accuracy_step_battery">Nimm die App von der Akku-Optimierung aus, damit die Übertragung im Hintergrund weiterläuft: Einstellungen → Apps → Alpha GPS → Akku → Nicht eingeschränkt.</string>
+    <!-- Contextual pairing-failure troubleshooting (shown when the camera rejects pairing) -->
+    <string name="pairing_failed_device_message">Die Kamera '%1$s' hat die Kopplung abgelehnt.</string>
+    <string name="pairing_failed_hint_intro">Das passiert häufig, wenn die Kamera nicht im Kopplungsmodus ist oder noch mit einem anderen Gerät gekoppelt ist:</string>
+    <string name="pairing_failed_hint_pairing_mode">• Versetze die Kamera in den Kopplungsmodus: MENU → Netzwerk → Bluetooth → Kopplung.</string>
+    <string name="pairing_failed_hint_camera_pairing">• Lösche an der Kamera alte Kopplungen: MENU → Netzwerk → Bluetooth → Gekopp. Gerät verwalten.</string>
+    <string name="pairing_failed_hint_phone_pairing">• Entferne die Kamera aus den Bluetooth-Einstellungen deines Telefons (Einstellungen → Bluetooth) und versuche es dann erneut.</string>
+    <!-- Hint under the scan error when device discovery times out -->
+    <string name="scan_timeout_creators_app_hint">Kamera nicht gefunden? Stelle sicher, dass sie im Kopplungsmodus ist. Wurde sie zuvor mit Sonys Creators' App oder Imaging Edge Mobile eingerichtet, entferne die alte Kopplung an der Kamera und in den Bluetooth-Einstellungen deines Telefons — die Fehlerbehebung führt dich durch die Schritte.</string>
+    <!-- Hint below the remote-control toggle on the device detail screen -->
+    <string name="remote_control_hint">Bei manchen Kameramodellen kann die Fernbedienung nicht gleichzeitig mit der Standortverknüpfung genutzt werden. Falls die Verbindung oder GPS-Übertragung nicht mehr funktioniert, schalte diese Option aus.</string>
 </resources>

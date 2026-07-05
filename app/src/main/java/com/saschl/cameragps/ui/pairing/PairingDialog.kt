@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +29,10 @@ import cameragps.sharednew.generated.resources.failed_to_pair_with_device
 import cameragps.sharednew.generated.resources.once_your_camera_is_ready_tap_continue_to_start_pairing
 import cameragps.sharednew.generated.resources.pairing_camera_title
 import cameragps.sharednew.generated.resources.pairing_complete_title
+import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
+import cameragps.sharednew.generated.resources.pairing_failed_hint_intro
+import cameragps.sharednew.generated.resources.pairing_failed_hint_pairing_mode
+import cameragps.sharednew.generated.resources.pairing_failed_hint_phone_pairing
 import cameragps.sharednew.generated.resources.pairing_failed_title
 import cameragps.sharednew.generated.resources.pairing_with_device_please_wait
 import cameragps.sharednew.generated.resources.successfully_paired_with_device
@@ -96,16 +102,41 @@ fun PairingConfirmationDialogWithLoading(
                         )
                     }
                     pairingResult == PairingResult.FAILED -> {
-                        // Show failure state
-                        Text(
-                            text = stringResource(
-                                Res.string.failed_to_pair_with_device,
-                                deviceName
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        // Show failure state with camera-side troubleshooting steps
+                        Column(
+                            modifier = Modifier.verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    Res.string.failed_to_pair_with_device,
+                                    deviceName
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = stringResource(Res.string.pairing_failed_hint_intro),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(Res.string.pairing_failed_hint_pairing_mode),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(Res.string.pairing_failed_hint_camera_pairing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(Res.string.pairing_failed_hint_phone_pairing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     else -> {
                         // Show initial instructions

@@ -53,6 +53,8 @@ import cameragps.sharednew.generated.resources.faq_gps_accuracy_answer
 import cameragps.sharednew.generated.resources.faq_gps_accuracy_question
 import cameragps.sharednew.generated.resources.faq_permissions_answer
 import cameragps.sharednew.generated.resources.faq_permissions_question
+import cameragps.sharednew.generated.resources.guide_intro
+import cameragps.sharednew.generated.resources.guide_title
 import cameragps.sharednew.generated.resources.help_about_description
 import cameragps.sharednew.generated.resources.help_about_title
 import cameragps.sharednew.generated.resources.help_close_description
@@ -77,7 +79,8 @@ private data class FaqItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HelpScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onTroubleshootingClick: () -> Unit = {}
 ) {
     val faqItems = listOf(
         FaqItem(
@@ -176,6 +179,35 @@ fun HelpScreen(
                             text = stringResource(Res.string.help_about_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            // Entry point to the visual troubleshooting guide
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTroubleshootingClick() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.guide_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(Res.string.guide_intro),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }
                 }

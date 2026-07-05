@@ -6,6 +6,8 @@
     <string name="ios_troubleshooting_step_2_pairing_mode">2. If the camera is not paired yet, enable pairing mode on the camera before tapping connect.</string>
     <string name="ios_troubleshooting_step_3_location_linking">3. On the camera, open Network/Smartphone settings and enable location information link so GPS data can be received from the phone.</string>
     <string name="ios_troubleshooting_step_4_location_permission">4. Make sure Location Services are enabled on iPhone and this app is allowed to access location.</string>
+    <string name="ios_troubleshooting_step_5_creators_app">5. If the camera was set up with Sony's Creators' App or Imaging Edge Mobile, it may connect without working properly. Remove the camera from the iPhone's Bluetooth settings (Settings → Bluetooth → ⓘ → Forget This Device), delete old pairings on the camera (MENU → Network → Bluetooth → Manage Paired Device) and set it up again in this app.</string>
+    <string name="ios_troubleshooting_step_6_remote_control">6. Some camera models cannot use remote control and location linking at the same time — if problems persist, open the camera's details and turn off remote control.</string>
     <string name="ios_troubleshooting_got_it">Got it</string>
     <string name="further_help">Still not working? Click here</string>
 

@@ -6,6 +6,8 @@
     <string name="ios_troubleshooting_step_2_pairing_mode">2. Falls die Kamera noch nicht gekoppelt ist, aktiviere den Kopplungsmodus an der Kamera, bevor du auf "Verbinden" tippst.</string>
     <string name="ios_troubleshooting_step_3_location_linking">3. Oeffne an der Kamera die Netzwerk-/Smartphone-Einstellungen und aktiviere die Verknuepfung der Standortinformationen, damit GPS-Daten vom Telefon empfangen werden koennen.</string>
     <string name="ios_troubleshooting_step_4_location_permission">4. Stelle sicher, dass die Ortungsdienste auf dem iPhone aktiviert sind und diese App Standortzugriff hat.</string>
+    <string name="ios_troubleshooting_step_5_creators_app">5. Wurde die Kamera mit Sonys Creators' App oder Imaging Edge Mobile eingerichtet, verbindet sie sich unter Umständen, ohne richtig zu funktionieren. Entferne die Kamera aus den Bluetooth-Einstellungen des iPhones (Einstellungen → Bluetooth → ⓘ → Dieses Gerät ignorieren), lösche alte Kopplungen an der Kamera (MENU → Netzwerk → Bluetooth → Gekopp. Gerät verwalten) und richte sie in dieser App neu ein.</string>
+    <string name="ios_troubleshooting_step_6_remote_control">6. Manche Kameramodelle können Fernbedienung und Standortverknüpfung nicht gleichzeitig nutzen — falls die Probleme bestehen bleiben, öffne die Kameradetails und schalte die Fernbedienung aus.</string>
     <string name="ios_troubleshooting_got_it">Verstanden</string>
     <string name="further_help">Funktioniert es immer noch nicht? Hier tippen</string>
 

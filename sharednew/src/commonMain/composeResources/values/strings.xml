@@ -147,6 +147,51 @@
     <string name="faq_gps_accuracy_answer">GPS accuracy depends on:\n• Satellite visibility (better outdoors)\n• Weather conditions\n• Your phone's GPS capabilities\n• Typical accuracy is 3–5 meters under good conditions</string>
     <string name="faq_background_work_question">Does the app work in the background?</string>
     <string name="faq_background_work_answer">Yes, once properly configured:\n• The service runs in the background to maintain GPS sync\n• Make sure to disable battery optimization\n• The app will show a persistent notification when active\n• GPS data is continuously sent to your connected camera</string>
+    <!-- Troubleshooting guide (visual step-by-step screen, shared by both platforms) -->
+    <string name="guide_title">Troubleshooting Guide</string>
+    <string name="guide_intro">Step-by-step fixes for the most common issues.</string>
+    <string name="guide_open_button">Open troubleshooting guide</string>
+    <string name="guide_location_link_title">Enable location &amp; time zone linking (older cameras)</string>
+    <string name="guide_location_link_description">On cameras with the older menu layout (e.g. α6400, ZV-E10, α6100, α7 III) location linking must be switched on manually. Newer cameras activate it automatically when the app connects.</string>
+    <string name="guide_location_link_step_enable">On the camera, turn on location linking:</string>
+    <string name="guide_location_link_step_enable_path">MENU → Network → Loc. Info. Link Set. → Location Info. Link → On</string>
+    <string name="guide_location_link_step_time">To also take over time and time zone from the phone, enable both options in the same menu:</string>
+    <string name="guide_location_link_step_time_path">Auto Time Correct. → On • Auto Area Adjust. → On</string>
+    <string name="guide_location_link_step_remote_note">If the menu items are grayed out or linking still fails, turn off the Bluetooth remote — see section 3.</string>
+    <string name="guide_link_location_a6400">Sony Help Guide: Loc. Info. Link Set. (α6400)</string>
+    <string name="guide_link_location_zve10">Sony Help Guide: Location Info. Link Set. (ZV-E10)</string>
+    <string name="guide_repair_title">Camera connects but GPS doesn't work</string>
+    <string name="guide_repair_description">Typical when the camera was set up with Sony's Creators' App or Imaging Edge Mobile before: the phone is already paired with the camera, so no new pairing is requested — but location transfer doesn't work properly with Alpha GPS. Removing the old pairing everywhere fixes this.</string>
+    <string name="guide_repair_step_phone">Remove the camera from your phone's Bluetooth settings:</string>
+    <string name="guide_repair_step_phone_path_android">Settings → Connected devices (Bluetooth) → your camera → Forget</string>
+    <string name="guide_repair_step_phone_path_ios">Settings → Bluetooth → ⓘ next to the camera → Forget This Device</string>
+    <string name="guide_repair_step_camera">On the camera, delete the old pairing (older models don't have this menu item — there, pairing again simply replaces the old connection):</string>
+    <string name="guide_repair_step_camera_path">MENU → Network → Bluetooth → Manage Paired Device</string>
+    <string name="guide_repair_step_sony_app">If a Sony app is still installed, remove the camera there as well:</string>
+    <string name="guide_repair_step_sony_app_path">Creators' App → Cameras → Setup → Unpair</string>
+    <string name="guide_repair_step_pair_again">Set up the camera again in Alpha GPS: put it into pairing mode and start a new scan.</string>
+    <string name="guide_remote_title">Turn off the Bluetooth remote (older cameras)</string>
+    <string name="guide_remote_description">Cameras like the α6400 cannot use the Bluetooth remote and location linking at the same time — with the remote on, the connection or GPS transfer stops working. Newer models (e.g. α7 IV and later) support both.</string>
+    <string name="guide_remote_step_camera">On the camera, switch the Bluetooth remote off:</string>
+    <string name="guide_remote_step_camera_path">MENU → Network → Bluetooth Rmt Ctrl → Off</string>
+    <string name="guide_remote_step_app">In Alpha GPS, tap the camera on the main screen and turn off 'Enable remote control'.</string>
+    <string name="guide_link_remote_a6400">Sony Help Guide: Bluetooth Rmt Ctrl (α6400)</string>
+    <string name="guide_accuracy_title">Location is imprecise or outdated</string>
+    <string name="guide_accuracy_description">If photos are tagged with a position that is noticeably off, the app usually isn't allowed to use your precise location.</string>
+    <string name="guide_accuracy_step_precise">Allow precise location for Alpha GPS:</string>
+    <string name="guide_accuracy_step_precise_path_android">Settings → Apps → Alpha GPS → Permissions → Location → Use precise location</string>
+    <string name="guide_accuracy_step_precise_path_ios">Settings → Privacy &amp; Security → Location Services → Alpha GPS → Precise Location → On</string>
+    <string name="guide_accuracy_step_battery">Exclude the app from battery optimization so transmission keeps running in the background: Settings → Apps → Alpha GPS → Battery → Unrestricted.</string>
+    <!-- Contextual pairing-failure troubleshooting (shown when the camera rejects pairing) -->
+    <string name="pairing_failed_device_message">The camera '%1$s' refused the pairing.</string>
+    <string name="pairing_failed_hint_intro">This often happens when the camera is not in pairing mode or is still paired with another device:</string>
+    <string name="pairing_failed_hint_pairing_mode">• Put the camera into pairing mode: MENU → Network → Bluetooth → Pairing.</string>
+    <string name="pairing_failed_hint_camera_pairing">• On the camera, delete old pairings: MENU → Network → Bluetooth → Manage Paired Device.</string>
+    <string name="pairing_failed_hint_phone_pairing">• Remove the camera from your phone's Bluetooth settings (Settings → Bluetooth), then try again.</string>
+    <!-- Hint under the scan error when device discovery times out -->
+    <string name="scan_timeout_creators_app_hint">Camera not found? Make sure it is in pairing mode. If it was set up with Sony's Creators' App or Imaging Edge Mobile before, remove the old pairing from the camera and from your phone's Bluetooth settings — the troubleshooting guide walks you through it.</string>
+    <!-- Hint below the remote-control toggle on the device detail screen -->
+    <string name="remote_control_hint">On some camera models, remote control cannot be used while location linking is active. If the connection or GPS transfer stops working, turn this off.</string>
     <!-- Help menu item -->
     <string name="help_menu_item">Help</string>
     <!-- Additional missing strings for device management -->

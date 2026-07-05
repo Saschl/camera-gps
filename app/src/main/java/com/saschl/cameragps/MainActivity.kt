@@ -36,6 +36,7 @@ import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.HelpScreen
 import com.saschl.cameragps.ui.SentryConsentDialog
+import com.saschl.cameragps.ui.TroubleshootingScreen
 import com.saschl.cameragps.ui.WelcomeScreen
 import com.saschl.cameragps.ui.device.CameraDeviceManager
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
@@ -203,6 +204,19 @@ class MainActivity : AppCompatActivity() {
                         HelpScreen(
                             onBackClick = {
                                 popBackStackIfPossible()
+                            },
+                            onTroubleshootingClick = {
+                                backStack.add(AppDestination.Troubleshooting)
+                            }
+                        )
+                    }
+                }
+
+                AppDestination.Troubleshooting -> {
+                    NavEntry(AppDestination.Troubleshooting) {
+                        TroubleshootingScreen(
+                            onBackClick = {
+                                popBackStackIfPossible()
                             }
                         )
                     }
@@ -228,6 +242,9 @@ class MainActivity : AppCompatActivity() {
                                 },
                                 onHelpClick = {
                                     backStack.add(AppDestination.Help)
+                                },
+                                onTroubleshootingClick = {
+                                    backStack.add(AppDestination.Troubleshooting)
                                 },
                                 onLogsClick = {
                                     backStack.add(AppDestination.Logs)
@@ -280,6 +297,9 @@ private sealed interface AppDestination : NavKey {
 
     @Serializable
     data object Help : AppDestination
+
+    @Serializable
+    data object Troubleshooting : AppDestination
 
     @Serializable
     data object Logs : AppDestination

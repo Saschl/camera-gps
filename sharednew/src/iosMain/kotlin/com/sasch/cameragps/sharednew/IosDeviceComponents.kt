@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -59,6 +61,8 @@ import cameragps.sharednew.generated.resources.ios_troubleshooting_step_1_blueto
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_2_pairing_mode
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_3_location_linking
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_4_location_permission
+import cameragps.sharednew.generated.resources.ios_troubleshooting_step_5_creators_app
+import cameragps.sharednew.generated.resources.ios_troubleshooting_step_6_remote_control
 import cameragps.sharednew.generated.resources.ios_troubleshooting_title
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.nearby_cameras
@@ -155,22 +159,29 @@ internal fun DeviceListContent(
                 onDismissRequest = { showTroubleshootingDialog = false },
                 title = { Text(stringResource(Res.string.ios_troubleshooting_title)) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text(stringResource(Res.string.ios_troubleshooting_step_1_bluetooth))
                         Text(stringResource(Res.string.ios_troubleshooting_step_2_pairing_mode))
                         Text(stringResource(Res.string.ios_troubleshooting_step_3_location_linking))
                         Text(stringResource(Res.string.ios_troubleshooting_step_4_location_permission))
-                        TextButton(onClick = {
-                            showTroubleshootingDialog = false
-                            onOpenHelp()
-                        }) {
-                            Text(stringResource(Res.string.further_help))
-                        }
+                        Text(stringResource(Res.string.ios_troubleshooting_step_5_creators_app))
+                        Text(stringResource(Res.string.ios_troubleshooting_step_6_remote_control))
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { showTroubleshootingDialog = false }) {
                         Text(stringResource(Res.string.ios_troubleshooting_got_it))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showTroubleshootingDialog = false
+                        onOpenHelp()
+                    }) {
+                        Text(stringResource(Res.string.further_help))
                     }
                 },
             )

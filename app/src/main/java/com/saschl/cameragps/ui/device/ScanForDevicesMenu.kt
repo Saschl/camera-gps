@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,9 +31,11 @@ import androidx.core.content.getSystemService
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.device_already_associated
 import cameragps.sharednew.generated.resources.device_association_removed_retry
+import cameragps.sharednew.generated.resources.guide_open_button
 import cameragps.sharednew.generated.resources.internal_error_happened
 import cameragps.sharednew.generated.resources.no_device_matching_the_given_filter_were_found
 import cameragps.sharednew.generated.resources.scan_for_devices
+import cameragps.sharednew.generated.resources.scan_timeout_creators_app_hint
 import cameragps.sharednew.generated.resources.start
 import cameragps.sharednew.generated.resources.the_request_was_canceled
 import cameragps.sharednew.generated.resources.the_user_explicitly_declined_the_request
@@ -57,11 +60,15 @@ fun ScanForDevicesMenu(
     associatedDevices: List<AssociatedDeviceCompat>,
     onSetPairingDevice: (AssociatedDeviceCompat) -> Unit,
     onDeviceAssociated: (AssociatedDeviceCompat) -> Unit,
+    onTroubleshootingClick: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var errorMessage by remember {
         mutableStateOf("")
+    }
+    var showTroubleshootingHint by remember {
+        mutableStateOf(false)
     }
     val requestCanceledText = stringResource(Res.string.the_request_was_canceled)
     val internalErrorText = stringResource(Res.string.internal_error_happened)
@@ -75,6 +82,7 @@ fun ScanForDevicesMenu(
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
     ) {
+        showTroubleshootingHint = it.resultCode == CompanionDeviceManager.RESULT_DISCOVERY_TIMEOUT
         when (it.resultCode) {
             CompanionDeviceManager.RESULT_OK -> {
                 it.data?.let { intent ->
@@ -166,6 +174,7 @@ fun ScanForDevicesMenu(
                             throw e
                         } catch (e: Exception) {
                             Timber.e(e, "Failed to start device association")
+                            showTroubleshootingHint = false
                             errorMessage =
                                 e.message?.takeIf { it.isNotBlank() } ?: internalErrorText
                         }
@@ -177,6 +186,16 @@ fun ScanForDevicesMenu(
         }
         if (errorMessage.isNotBlank()) {
             Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
+            if (showTroubleshootingHint) {
+                Text(
+                    text = stringResource(Res.string.scan_timeout_creators_app_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onTroubleshootingClick) {
+                    Text(text = stringResource(Res.string.guide_open_button))
+                }
+            }
         }
     }
 }

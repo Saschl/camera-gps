@@ -60,6 +60,7 @@ fun DevicesScreen(
     onConnect: (AssociatedDeviceCompat) -> Unit,
     onSettingsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
+    onTroubleshootingClick: () -> Unit = {},
     onLogsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -180,7 +181,8 @@ fun DevicesScreen(
                 isLocationEnabled,
                 associatedDevices,
                 onSetPairingDevice = { device -> pendingPairingDevice = device },
-                onDeviceAssociated = onDeviceAssociated
+                onDeviceAssociated = onDeviceAssociated,
+                onTroubleshootingClick = onTroubleshootingClick
             )
 
 

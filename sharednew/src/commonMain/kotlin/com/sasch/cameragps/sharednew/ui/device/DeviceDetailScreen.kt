@@ -22,6 +22,7 @@ import cameragps.sharednew.generated.resources.enableConstantly
 import cameragps.sharednew.generated.resources.enable_device
 import cameragps.sharednew.generated.resources.enable_remote_control
 import cameragps.sharednew.generated.resources.hint_if_issues_after_switching
+import cameragps.sharednew.generated.resources.remote_control_hint
 import com.sasch.cameragps.sharednew.util.KotlinPlatform
 import com.sasch.cameragps.sharednew.util.currentPlatform
 import org.jetbrains.compose.resources.stringResource
@@ -92,6 +93,14 @@ fun DeviceDetailContent(
                 onCheckedChange = { enabled ->
                     viewModel.setRemoteControlStatus(enabled, deviceId)
                 },
+            )
+        }
+
+        item {
+            Text(
+                text = stringResource(Res.string.remote_control_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 

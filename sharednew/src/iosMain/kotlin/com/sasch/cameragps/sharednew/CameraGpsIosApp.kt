@@ -1,5 +1,9 @@
 package com.sasch.cameragps.sharednew
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -15,6 +19,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
@@ -24,10 +30,18 @@ import cameragps.sharednew.generated.resources.donation_dialog_confirm
 import cameragps.sharednew.generated.resources.donation_dialog_dismiss
 import cameragps.sharednew.generated.resources.donation_dialog_message
 import cameragps.sharednew.generated.resources.donation_dialog_title
+import cameragps.sharednew.generated.resources.further_help
 import cameragps.sharednew.generated.resources.header_device_list
 import cameragps.sharednew.generated.resources.info_24px
+import cameragps.sharednew.generated.resources.ios_troubleshooting_got_it
 import cameragps.sharednew.generated.resources.open_location_settings
 import cameragps.sharednew.generated.resources.open_settings_for_precise_location
+import cameragps.sharednew.generated.resources.pairing_failed_device_message
+import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
+import cameragps.sharednew.generated.resources.pairing_failed_hint_intro
+import cameragps.sharednew.generated.resources.pairing_failed_hint_pairing_mode
+import cameragps.sharednew.generated.resources.pairing_failed_hint_phone_pairing
+import cameragps.sharednew.generated.resources.pairing_failed_title
 import cameragps.sharednew.generated.resources.precise_location
 import cameragps.sharednew.generated.resources.settings
 import cameragps.sharednew.generated.resources.settings_24px
@@ -64,6 +78,7 @@ internal enum class IosScreen {
     DeviceDetails,
     Settings,
     Help,
+    Troubleshooting,
     Logs,
 }
 
@@ -88,10 +103,14 @@ internal fun CameraGpsIosApp() {
         )
     }
     var showDonationDialog by remember { mutableStateOf(false) }
+    val pairingFailedDeviceName by bluetoothController.pairingFailedDevice.collectAsState()
     var showRequestPreciseAccuracyPermissionDialog by remember { mutableStateOf(false) }
     var scrollToTipJarOnSettingsOpen by remember { mutableStateOf(false) }
     var forceDonationDialogThisLaunch by remember { mutableStateOf(false) }
     var selectedDeviceIdentifier by remember { mutableStateOf<String?>(null) }
+    // Where the back button of the troubleshooting guide returns to (it can be opened
+    // from the help screen as well as from the device-list dialogs).
+    var troubleshootingReturnScreen by remember { mutableStateOf(IosScreen.Devices) }
 
     DisposableEffect(Unit) {
         val center = NSNotificationCenter.defaultCenter
@@ -226,7 +245,10 @@ internal fun CameraGpsIosApp() {
                     isAppEnabled = isAppEnabled,
                     isScanning = autoScanEnabled,
                     onOpenSettings = { currentScreen = IosScreen.Settings },
-                    onOpenHelp = { currentScreen = IosScreen.Help },
+                    onOpenHelp = {
+                        troubleshootingReturnScreen = IosScreen.Devices
+                        currentScreen = IosScreen.Troubleshooting
+                    },
                     onConnect = { device ->
                         scope.launch {
                             if (!device.isConnected) {
@@ -300,7 +322,17 @@ internal fun CameraGpsIosApp() {
 
         IosScreen.Help -> {
             IosHelpScreen(
-                onBackClick = { currentScreen = IosScreen.Devices }
+                onBackClick = { currentScreen = IosScreen.Devices },
+                onOpenTroubleshooting = {
+                    troubleshootingReturnScreen = IosScreen.Help
+                    currentScreen = IosScreen.Troubleshooting
+                },
+            )
+        }
+
+        IosScreen.Troubleshooting -> {
+            IosTroubleshootingScreen(
+                onBackClick = { currentScreen = troubleshootingReturnScreen }
             )
         }
 
@@ -335,6 +367,43 @@ internal fun CameraGpsIosApp() {
                     Text(text = stringResource(Res.string.donation_dialog_dismiss))
                 }
             }
+        )
+    }
+    pairingFailedDeviceName?.let { failedDeviceName ->
+        AlertDialog(
+            onDismissRequest = { bluetoothController.clearPairingFailedDevice() },
+            title = { Text(text = stringResource(Res.string.pairing_failed_title)) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(
+                            Res.string.pairing_failed_device_message,
+                            failedDeviceName
+                        )
+                    )
+                    Text(stringResource(Res.string.pairing_failed_hint_intro))
+                    Text(stringResource(Res.string.pairing_failed_hint_pairing_mode))
+                    Text(stringResource(Res.string.pairing_failed_hint_camera_pairing))
+                    Text(stringResource(Res.string.pairing_failed_hint_phone_pairing))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { bluetoothController.clearPairingFailedDevice() }) {
+                    Text(stringResource(Res.string.ios_troubleshooting_got_it))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    bluetoothController.clearPairingFailedDevice()
+                    troubleshootingReturnScreen = IosScreen.Devices
+                    currentScreen = IosScreen.Troubleshooting
+                }) {
+                    Text(stringResource(Res.string.further_help))
+                }
+            },
         )
     }
     if (showRequestPreciseAccuracyPermissionDialog) {

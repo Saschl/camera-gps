@@ -40,6 +40,8 @@ import cameragps.sharednew.generated.resources.faq_gps_accuracy_answer
 import cameragps.sharednew.generated.resources.faq_gps_accuracy_question
 import cameragps.sharednew.generated.resources.faq_permissions_answer
 import cameragps.sharednew.generated.resources.faq_permissions_question
+import cameragps.sharednew.generated.resources.guide_intro
+import cameragps.sharednew.generated.resources.guide_title
 import cameragps.sharednew.generated.resources.help_about_description
 import cameragps.sharednew.generated.resources.help_about_title
 import cameragps.sharednew.generated.resources.help_close_description
@@ -51,6 +53,7 @@ import cameragps.sharednew.generated.resources.how_about_privacy_answer
 import cameragps.sharednew.generated.resources.is_there_documenation
 import cameragps.sharednew.generated.resources.is_there_documenation_answer
 import cameragps.sharednew.generated.resources.is_there_documenation_answer_coffee
+import com.sasch.cameragps.sharednew.ui.help.TroubleshootingGuideContent
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.painterResource
@@ -65,6 +68,7 @@ private data class IosFaqItem(
 @Composable
 internal fun IosHelpScreen(
     onBackClick: () -> Unit,
+    onOpenTroubleshooting: () -> Unit = {},
 ) {
     val faqItems = listOf(
         IosFaqItem(
@@ -131,6 +135,33 @@ internal fun IosHelpScreen(
                             text = stringResource(Res.string.help_about_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+
+            // Entry point to the visual troubleshooting guide
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenTroubleshooting() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    ),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(Res.string.guide_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(Res.string.guide_intro),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
                         )
                     }
                 }
@@ -242,6 +273,25 @@ internal fun IosHelpScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun IosTroubleshootingScreen(
+    onBackClick: () -> Unit,
+) {
+    SharedSettingsScreen(
+        title = stringResource(Res.string.guide_title),
+        onBackClick = onBackClick,
+        onTitleClick = {},
+        navigationIcon = {
+            Icon(
+                painter = painterResource(Res.drawable.arrow_back_24px),
+                contentDescription = stringResource(Res.string.help_close_description),
+            )
+        },
+    ) { innerPadding ->
+        TroubleshootingGuideContent(innerPadding)
     }
 }
 

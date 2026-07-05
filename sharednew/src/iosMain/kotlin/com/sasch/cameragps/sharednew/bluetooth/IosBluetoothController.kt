@@ -6,6 +6,7 @@ import com.diamondedge.logging.VariableLogLevel
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.autoReconnectStore
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.clearPairingFailedDevice
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteCommand
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
@@ -91,6 +92,29 @@ object IosBluetoothController : BluetoothController {
     private val _devices = MutableStateFlow<List<BluetoothDeviceInfo>>(emptyList())
     override val devices: StateFlow<List<BluetoothDeviceInfo>> = _devices
 
+    /**
+     * Display name of the last device whose pairing was rejected by the camera
+     * (pairing gate or auth retries exhausted). The UI shows a troubleshooting
+     * dialog while this is non-null and clears it via [clearPairingFailedDevice].
+     * A later successful handshake with the same device also clears it.
+     */
+    private val _pairingFailedDevice = MutableStateFlow<String?>(null)
+    val pairingFailedDevice: StateFlow<String?> = _pairingFailedDevice
+
+    private var pairingFailedIdentifier: String? = null
+
+    fun clearPairingFailedDevice() {
+        pairingFailedIdentifier = null
+        _pairingFailedDevice.value = null
+    }
+
+    private fun reportPairingFailure(identifier: String, displayName: String?) {
+        pairingFailedIdentifier = identifier
+        _pairingFailedDevice.value = displayName
+            ?: persistedDevices[identifier.uppercase()]?.deviceName
+                    ?: identifier
+    }
+
     override val capabilities: Set<BluetoothCapability> = setOf(
         BluetoothCapability.Scan,
         BluetoothCapability.Connect,
@@ -115,6 +139,10 @@ object IosBluetoothController : BluetoothController {
     private val transport: IosBleTransport = IosBleTransport(
         scope = controllerScope,
         onPairingGateExhausted = { peripheral ->
+            reportPairingFailure(
+                identifier = peripheral.identifier.UUIDString,
+                displayName = peripheral.name,
+            )
             if (central.state == CBManagerStatePoweredOn) {
                 central.cancelPeripheralConnection(peripheral)
             }
@@ -152,11 +180,27 @@ object IosBluetoothController : BluetoothController {
         }
         controllerScope.launch {
             orchestrator.events.collect { event ->
-                if (event is OrchestratorEvent.PairingFailed) {
-                    val peripheral = connected[resolveKnownIdentifier(event.identifier)]
-                    if (peripheral != null && central.state == CBManagerStatePoweredOn) {
-                        central.cancelPeripheralConnection(peripheral)
+                when (event) {
+                    is OrchestratorEvent.PairingFailed -> {
+                        val knownIdentifier = resolveKnownIdentifier(event.identifier)
+                        val peripheral = connected[knownIdentifier]
+                        reportPairingFailure(
+                            identifier = knownIdentifier,
+                            displayName = peripheral?.name,
+                        )
+                        if (peripheral != null && central.state == CBManagerStatePoweredOn) {
+                            central.cancelPeripheralConnection(peripheral)
+                        }
                     }
+
+                    is OrchestratorEvent.HandshakeCompleted -> {
+                        val failed = pairingFailedIdentifier
+                        if (failed != null && failed.equals(event.identifier, ignoreCase = true)) {
+                            clearPairingFailedDevice()
+                        }
+                    }
+
+                    else -> Unit
                 }
             }
         }

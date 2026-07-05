@@ -67,7 +67,7 @@ class AndroidBleTransport(
         try {
             val device: BluetoothDevice = bluetoothManager.adapter.getRemoteDevice(address)
             if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                Timber.w("Device $address is not paired. Cannot connect.")
+                //Timber.w("Device $address is not paired. Cannot connect.")
                 return false
             }
             val gatt = device.connectGatt(context, true, gattCallback)

@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
@@ -79,6 +80,12 @@ class LocationSenderService : LifecycleService() {
         val activeTransmissions = mutableStateMapOf<String, Boolean>()
         val remoteFeatureActive = mutableStateMapOf<String, Boolean>()
         val sessionPhases = mutableStateMapOf<String, BleSessionPhase>()
+
+        /**
+         * Address of the last device whose pairing was rejected by the camera (auth retries
+         * exhausted). The UI shows a troubleshooting dialog while non-null and clears it.
+         */
+        val pairingFailedDevice = mutableStateOf<String?>(null)
 
         @Volatile
         var isRunning: Boolean = false
@@ -171,11 +178,16 @@ class LocationSenderService : LifecycleService() {
             }
 
             is OrchestratorEvent.HandshakeCompleted -> {
-                // Session state reaches the UI through the sessions mirror
+                // Session state reaches the UI through the sessions mirror; a completed
+                // handshake also invalidates a pending pairing-failure hint for the device.
+                if (pairingFailedDevice.value.equals(event.identifier, ignoreCase = true)) {
+                    pairingFailedDevice.value = null
+                }
             }
 
             is OrchestratorEvent.PairingFailed -> {
                 Timber.e("Pairing failed for ${event.identifier}")
+                pairingFailedDevice.value = event.identifier
             }
 
             is OrchestratorEvent.FirstLocationAcquired -> {

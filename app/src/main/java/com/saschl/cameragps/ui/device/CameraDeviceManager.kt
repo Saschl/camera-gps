@@ -12,8 +12,12 @@ import android.os.Build
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,16 +33,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.dismiss_button
 import cameragps.sharednew.generated.resources.donation_dialog_confirm
 import cameragps.sharednew.generated.resources.donation_dialog_dismiss
 import cameragps.sharednew.generated.resources.donation_dialog_message
 import cameragps.sharednew.generated.resources.donation_dialog_title
+import cameragps.sharednew.generated.resources.guide_open_button
+import cameragps.sharednew.generated.resources.pairing_failed_device_message
+import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
+import cameragps.sharednew.generated.resources.pairing_failed_hint_intro
+import cameragps.sharednew.generated.resources.pairing_failed_hint_pairing_mode
+import cameragps.sharednew.generated.resources.pairing_failed_hint_phone_pairing
+import cameragps.sharednew.generated.resources.pairing_failed_title
 import com.google.android.play.core.review.ReviewException
 import com.google.android.play.core.review.ReviewManagerFactory
 import com.google.android.play.core.review.model.ReviewErrorCode
@@ -64,6 +77,7 @@ fun CameraDeviceManager(
     onForceDonationDialogConsumed: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
+    onTroubleshootingClick: () -> Unit = {},
     onLogsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -108,6 +122,17 @@ fun CameraDeviceManager(
 
     var isReviewFlowActive by remember { mutableStateOf(false) }
     var showDonationDialog by remember { mutableStateOf(false) }
+    val pairingFailedAddress by LocationSenderService.pairingFailedDevice
+    // Suppresses re-showing the pairing-failure dialog for the same device: the failed
+    // camera keeps auto-reconnecting and may exhaust its pairing retries repeatedly.
+    // The service clears pairingFailedDevice on a successful handshake, which re-arms it.
+    var dismissedPairingFailedAddress by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(pairingFailedAddress) {
+        if (pairingFailedAddress == null) {
+            dismissedPairingFailedAddress = null
+        }
+    }
 
     LaunchedEffect(associatedDevices) {
         if (SCREENSHOT_MODE) return@LaunchedEffect
@@ -256,6 +281,7 @@ fun CameraDeviceManager(
                         },
                         onSettingsClick = onSettingsClick,
                         onHelpClick = onHelpClick,
+                        onTroubleshootingClick = onTroubleshootingClick,
                         onLogsClick = onLogsClick
                     )
                 }
@@ -330,6 +356,49 @@ fun CameraDeviceManager(
                     .clickable(enabled = false) { }
             )
         }
+
+        pairingFailedAddress
+            ?.takeIf { !SCREENSHOT_MODE && it != dismissedPairingFailedAddress }
+            ?.let { failedAddress ->
+                val failedDeviceName = associatedDevices
+                    .find { it.address.equals(failedAddress, ignoreCase = true) }
+                    ?.name
+                    ?: failedAddress
+                AlertDialog(
+                    onDismissRequest = { dismissedPairingFailedAddress = failedAddress },
+                    title = { Text(text = stringResource(Res.string.pairing_failed_title)) },
+                    text = {
+                        Column(
+                            modifier = Modifier.verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    Res.string.pairing_failed_device_message,
+                                    failedDeviceName
+                                )
+                            )
+                            Text(text = stringResource(Res.string.pairing_failed_hint_intro))
+                            Text(text = stringResource(Res.string.pairing_failed_hint_pairing_mode))
+                            Text(text = stringResource(Res.string.pairing_failed_hint_camera_pairing))
+                            Text(text = stringResource(Res.string.pairing_failed_hint_phone_pairing))
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                dismissedPairingFailedAddress = failedAddress
+                                onTroubleshootingClick()
+                            }
+                        ) { Text(text = stringResource(Res.string.guide_open_button)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            dismissedPairingFailedAddress = failedAddress
+                        }) { Text(text = stringResource(Res.string.dismiss_button)) }
+                    }
+                )
+            }
 
         if (showDonationDialog) {
             AlertDialog(
