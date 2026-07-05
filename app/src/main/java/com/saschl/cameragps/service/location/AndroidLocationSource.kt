@@ -16,7 +16,6 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.Priority
-import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS
 import com.sasch.cameragps.sharednew.bluetooth.location.GeoLocation
 import com.sasch.cameragps.sharednew.bluetooth.location.LocationSource
@@ -134,9 +133,9 @@ class AndroidLocationSource(
 
     private fun isLocationTooOld(location: Location): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            location.elapsedRealtimeAgeMillis > SonyBluetoothConstants.OLD_LOCATION_THRESHOLD_MS
+            location.elapsedRealtimeAgeMillis > 30000
         } else {
-            (System.currentTimeMillis() - location.time) > SonyBluetoothConstants.OLD_LOCATION_THRESHOLD_MS
+            (System.currentTimeMillis() - location.time) > 30000
         }
     }
 
@@ -173,8 +172,8 @@ class AndroidLocationSource(
             Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_UPDATE_INTERVAL_MS,
         )
-            .setWaitForAccurateLocation(false)
-            .setMinUpdateDistanceMeters(10f)
+            .setWaitForAccurateLocation(true)
+            .setMinUpdateDistanceMeters(2f)
             .build()
 
         val callback = locationCallback ?: return

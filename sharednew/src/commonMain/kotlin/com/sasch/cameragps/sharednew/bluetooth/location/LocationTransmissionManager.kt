@@ -186,11 +186,11 @@ class LocationTransmissionManager(
         if (accuracyDifference <= SonyBluetoothConstants.ACCURACY_THRESHOLD_METERS) return true
 
         val ageMs = new.timestampMillis - current.timestampMillis
-        return ageMs > SonyBluetoothConstants.OLD_LOCATION_THRESHOLD_MS
+        return ageMs / 1000 > MAX_IMMEDIATE_FIX_AGE_SECONDS
     }
 
     private fun isTooOld(location: GeoLocation): Boolean =
-        nowMillis() - location.timestampMillis > SonyBluetoothConstants.OLD_LOCATION_THRESHOLD_MS
+        nowMillis() - location.timestampMillis / 1000 > MAX_IMMEDIATE_FIX_AGE_SECONDS
 
     private fun isFreshFix(location: GeoLocation): Boolean =
         (nowMillis() - location.timestampMillis) / 1000 <= MAX_IMMEDIATE_FIX_AGE_SECONDS
@@ -198,6 +198,6 @@ class LocationTransmissionManager(
     private fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
     private companion object {
-        const val MAX_IMMEDIATE_FIX_AGE_SECONDS = 5 * 60L
+        const val MAX_IMMEDIATE_FIX_AGE_SECONDS = 30
     }
 }

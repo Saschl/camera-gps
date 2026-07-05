@@ -67,8 +67,5 @@ object SonyBluetoothConstants {
     // Accuracy threshold for location updates
     const val ACCURACY_THRESHOLD_METERS = 200.0
 
-    // Time threshold for old location updates (30 seconds)
-    const val OLD_LOCATION_THRESHOLD_MS = 30000
-
     const val locationTransmissionNotificationId = 404
 }
