@@ -8,7 +8,6 @@ import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.autoReconnectStore
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.clearPairingFailedDevice
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteCommand
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
 import com.sasch.cameragps.sharednew.database.LogDatabase
@@ -250,6 +249,12 @@ object IosBluetoothController : BluetoothController {
             if (appEnabled) {
                 restoredPeripherals.forEach { any ->
                     val peripheral = any as? CBPeripheral ?: return@forEach
+                    // Re-set the delegate before the first suspension: CoreBluetooth
+                    // delivers the callbacks that relaunched the app right after
+                    // restoration, and they are dropped while the delegate is unset.
+                    if (peripheral.state == CBPeripheralStateConnected) {
+                        transport.registerPeripheral(peripheral)
+                    }
                     controllerScope.launch {
                         val id = peripheral.identifier.UUIDString
                         if (!isDeviceEnabled(id)) {
@@ -262,6 +267,12 @@ object IosBluetoothController : BluetoothController {
                         discovered[id] = peripheral
                         if (peripheral.state == CBPeripheralStateConnected) {
                             connected[id] = peripheral
+                            /**
+                             * A peripheral restored already connected gets no
+                             * didConnectPeripheral — announce it so the orchestrator
+                             * runs discovery + handshake
+                             */
+                            transport.attachPeripheral(peripheral)
                         }
                         refreshDeviceList()
                     }
@@ -436,16 +447,6 @@ object IosBluetoothController : BluetoothController {
         refreshDeviceList()
     }
 
-    fun triggerRemoteShutter(identifier: String): Boolean =
-        sendRemoteCommand(identifier, RemoteCommand.ShutterFullPress)
-
-    /** Send a remote-control command to a camera whose handshake is complete. */
-    fun sendRemoteCommand(identifier: String, command: RemoteCommand): Boolean {
-        val session = orchestrator.registry.get(identifier) ?: return false
-        if (session.phase != BleSessionPhase.Transmitting) return false
-        return orchestrator.sendRemoteCommand(identifier, command)
-    }
-
     /** Run a full shutter cycle (half press → focus delay → full press → releases). */
     fun triggerShutterSequence(identifier: String): Boolean {
         val session = orchestrator.registry.get(identifier) ?: return false
@@ -525,10 +526,6 @@ object IosBluetoothController : BluetoothController {
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Auto-reconnect
-    // ---------------------------------------------------------------------------
-
     private suspend fun reconnectToPersistedPeripherals() {
         autoReconnectStore.loadFromDisk()
         migrateLegacyDevicesToDatabase()
@@ -557,10 +554,7 @@ object IosBluetoothController : BluetoothController {
         refreshDeviceList()
     }
 
-    // ---------------------------------------------------------------------------
-    // UI state
-    // ---------------------------------------------------------------------------
-
+    // UI state, should be viewmodel
     private fun refreshDeviceList() {
         val persistedByNormalized = persistedDevices
         val discoveredByNormalized = discovered.entries.associateBy { it.key.uppercase() }
