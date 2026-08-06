@@ -10,9 +10,11 @@ interface DeviceDetailDataSource {
     suspend fun isDeviceEnabled(deviceId: String): Boolean
     suspend fun isAlwaysOnEnabled(deviceId: String): Boolean
     suspend fun isRemoteControlEnabled(deviceId: String): Boolean
+    suspend fun getHandshakeDelayMs(deviceId: String): Long
     suspend fun setDeviceEnabled(deviceId: String, enabled: Boolean)
     suspend fun setAlwaysOnEnabled(deviceId: String, enabled: Boolean)
     suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean)
+    suspend fun setHandshakeDelayMs(deviceId: String, delayMs: Long)
 }
 
 interface DeviceDetailServiceActions {
@@ -26,6 +28,7 @@ data class DeviceDetailToggleState(
     val isDeviceEnabled: Boolean = true,
     val isAlwaysOnEnabled: Boolean = false,
     val isRemoteControlEnabled: Boolean = false,
+    val handshakeDelayMs: Long = 0,
 )
 
 class DeviceDetailStateStore(
@@ -42,6 +45,7 @@ class DeviceDetailStateStore(
                 isAlwaysOnEnabled = dataSource.isAlwaysOnEnabled(normalized),
                 isDeviceEnabled = dataSource.isDeviceEnabled(normalized),
                 isRemoteControlEnabled = dataSource.isRemoteControlEnabled(normalized),
+                handshakeDelayMs = dataSource.getHandshakeDelayMs(normalized),
             )
         }
     }
@@ -69,6 +73,13 @@ class DeviceDetailStateStore(
         dataSource.ensureDeviceExists(normalized, deviceName)
         dataSource.setRemoteControlEnabled(normalized, enabled)
         _uiState.update { it.copy(isRemoteControlEnabled = enabled) }
+    }
+
+    suspend fun setHandshakeDelayMs(deviceId: String, delayMs: Long, deviceName: String? = null) {
+        val normalized = deviceId.uppercase()
+        dataSource.ensureDeviceExists(normalized, deviceName)
+        dataSource.setHandshakeDelayMs(normalized, delayMs)
+        _uiState.update { it.copy(handshakeDelayMs = delayMs) }
     }
 
     fun setButtonEnabled(enabled: Boolean) {

@@ -74,6 +74,13 @@ private fun createAndroidDataSource(dao: CameraDeviceDAO): DeviceDetailDataSourc
         override suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean) {
             dao.setRemoteControlEnabled(deviceId, enabled)
         }
+
+        override suspend fun getHandshakeDelayMs(deviceId: String) =
+            dao.getHandshakeDelayMs(deviceId) ?: 0L
+
+        override suspend fun setHandshakeDelayMs(deviceId: String, delayMs: Long) {
+            dao.setHandshakeDelayMs(deviceId, delayMs)
+        }
     }
 }
 

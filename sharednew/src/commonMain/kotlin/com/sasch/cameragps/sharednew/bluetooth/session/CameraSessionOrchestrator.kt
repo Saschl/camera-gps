@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The common session orchestrator. Owns the per-device session registry, the
@@ -211,6 +212,14 @@ class CameraSessionOrchestrator(
         _events.trySend(OrchestratorEvent.DeviceConnected(id))
 
         scope.launch {
+            val delayMs = runCatching { deviceDao.getHandshakeDelayMs(id) }.getOrNull() ?: 0L
+            if (delayMs > 0) {
+                // Some cameras stall their own boot while servicing BLE traffic;
+                // the per-device delay lets them finish starting first
+                log.i { "Delaying connection setup for $id by ${delayMs}ms" }
+                delay(delayMs.milliseconds)
+                if (registry.get(id) == null || !transport.isConnected(id)) return@launch
+            }
             registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.DiscoveringServices) }
             when (queue.execute(id, BleOperation.DiscoverServices)) {
                 is BleOperationResult.Success -> sessionCoordinator.beginHandshake(id)

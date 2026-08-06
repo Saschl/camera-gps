@@ -41,5 +41,11 @@ interface CameraDeviceDAO {
 
     @Query("SELECT remoteControlEnabled FROM camera_devices WHERE mac = UPPER(:address)")
     suspend fun isRemoteControlEnabled(address: String): Boolean
+
+    @Query("SELECT handshakeDelayMs FROM camera_devices WHERE mac = UPPER(:address)")
+    suspend fun getHandshakeDelayMs(address: String): Long?
+
+    @Query("UPDATE camera_devices SET handshakeDelayMs = :delayMs WHERE mac = UPPER(:deviceId)")
+    suspend fun setHandshakeDelayMs(deviceId: String, delayMs: Long)
 }
 

@@ -42,6 +42,12 @@ class DeviceDetailViewModel(
         }
     }
 
+    fun setHandshakeDelay(delayMs: Long, device: String) {
+        viewModelScope.launch {
+            stateStore.setHandshakeDelayMs(device, delayMs)
+        }
+    }
+
     fun setAlwaysOnEnabled(enabled: Boolean, deviceAddress: String) {
         viewModelScope.launch {
             stateStore.setAlwaysOnEnabled(deviceAddress, enabled)

@@ -57,6 +57,14 @@ internal fun IosDeviceDetailScreen(
         override suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean) {
             deviceDao.setRemoteControlEnabled(deviceId.uppercase(), enabled)
         }
+
+        override suspend fun getHandshakeDelayMs(deviceId: String): Long {
+            return deviceDao.getHandshakeDelayMs(deviceId.uppercase()) ?: 0L
+        }
+
+        override suspend fun setHandshakeDelayMs(deviceId: String, delayMs: Long) {
+            deviceDao.setHandshakeDelayMs(deviceId.uppercase(), delayMs)
+        }
     }
     val viewModel: DeviceDetailViewModel = viewModel(key = device.identifier) {
         DeviceDetailViewModel(
