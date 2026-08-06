@@ -127,11 +127,22 @@ class CameraDeviceCompanionService : CompanionDeviceService() {
     }
 
     private fun stopServiceOnDeviceDisappeared(address: String) {
+        // startService from the background throws when the target service is not
+        // already running — and if it is not running there is nothing to shut
+        // down anyway. isRunning can flip between check and call, so keep both.
+        if (!LocationSenderService.isRunning) {
+            Timber.i("LocationSenderService not running, ignoring disappearance of $address")
+            return
+        }
         val shutdownIntent = Intent(this, LocationSenderService::class.java).apply {
             action = SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
         }
         shutdownIntent.putExtra("address", address.uppercase())
-        startService(shutdownIntent)
+        try {
+            startService(shutdownIntent)
+        } catch (e: IllegalStateException) {
+            Timber.w(e, "Could not deliver shutdown intent for $address")
+        }
     }
 
     override fun onCreate() {
