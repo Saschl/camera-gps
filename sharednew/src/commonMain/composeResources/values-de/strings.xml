@@ -275,4 +275,8 @@
     <string name="scan_timeout_creators_app_hint">Kamera nicht gefunden? Stelle sicher, dass sie im Kopplungsmodus ist. Wurde sie zuvor mit Sonys Creators' App oder Imaging Edge Mobile eingerichtet, entferne die alte Kopplung an der Kamera und in den Bluetooth-Einstellungen deines Telefons — die Fehlerbehebung führt dich durch die Schritte.</string>
     <!-- Hint below the remote-control toggle on the device detail screen -->
     <string name="remote_control_hint">Bei manchen Kameramodellen kann die Fernbedienung nicht gleichzeitig mit der Standortverknüpfung genutzt werden. Falls die Verbindung oder GPS-Übertragung nicht mehr funktioniert, schalte diese Option aus.</string>
+    <string name="handshake_delay_title">Verbindungsaufbau verzögern</string>
+    <string name="handshake_delay_description">Wartet nach dem Verbinden der Kamera, bevor die App die GPS-Einrichtung startet. Versuche ein paar Sekunden, wenn diese Kamera langsam startet oder der Bildschirm schwarz bleibt, während die App aktiviert ist.</string>
+    <string name="handshake_delay_off">Aus</string>
+    <string name="handshake_delay_seconds">%1$d s</string>
 </resources>
