@@ -13,8 +13,10 @@ import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
 import platform.CoreLocation.kCLAuthorizationStatusAuthorizedWhenInUse
+import platform.CoreLocation.kCLDistanceFilterNone
 import platform.Foundation.NSError
 import platform.Foundation.timeIntervalSince1970
+import platform.Foundation.timeIntervalSinceNow
 import platform.darwin.NSObject
 
 /**
@@ -40,6 +42,18 @@ internal class IosLocationSource : LocationSource {
     private val locationDelegate = object : NSObject(), CLLocationManagerDelegateProtocol {
         override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
             val location = didUpdateLocations.lastOrNull() as? CLLocation ?: return
+
+            // avoid delivering stale fixes
+            val ageSeconds = -location.timestamp.timeIntervalSinceNow
+            if (ageSeconds > MAX_FIX_AGE_SECONDS) {
+                log.w { "Ignoring stale location fix (${ageSeconds.toInt()}s old)" }
+                // Deliver everything until a fresh fix arrives.
+                manager.distanceFilter = kCLDistanceFilterNone
+                return
+            }
+            if (manager.distanceFilter != DISTANCE_FILTER_METERS) {
+                manager.distanceFilter = DISTANCE_FILTER_METERS
+            }
             log.d { "Received new location" }
             val lat = location.coordinate.useContents { latitude }
             val lng = location.coordinate.useContents { longitude }
@@ -68,7 +82,7 @@ internal class IosLocationSource : LocationSource {
     private val locationManager = CLLocationManager().apply {
         delegate = locationDelegate
         desiredAccuracy = platform.CoreLocation.kCLLocationAccuracyBest
-        distanceFilter = 2.0
+        distanceFilter = DISTANCE_FILTER_METERS
         pausesLocationUpdatesAutomatically = false
         allowsBackgroundLocationUpdates = true
     }
@@ -96,4 +110,10 @@ internal class IosLocationSource : LocationSource {
     override fun hasPreciseAuthorization(): Boolean =
         locationManager.accuracyAuthorization() ==
                 CLAccuracyAuthorization.CLAccuracyAuthorizationFullAccuracy
+
+    private companion object {
+        /** Matches AndroidLocationSource's staleness gate for delivered fixes. */
+        const val MAX_FIX_AGE_SECONDS = 30.0
+        const val DISTANCE_FILTER_METERS = 2.0
+    }
 }

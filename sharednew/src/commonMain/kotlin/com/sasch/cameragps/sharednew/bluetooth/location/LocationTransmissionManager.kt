@@ -189,7 +189,7 @@ class LocationTransmissionManager(
     }
 
     private fun isTooOld(location: GeoLocation): Boolean =
-        nowMillis() - location.timestampMillis / 1000 > MAX_IMMEDIATE_FIX_AGE_SECONDS
+        (nowMillis() - location.timestampMillis) / 1000 > MAX_IMMEDIATE_FIX_AGE_SECONDS
 
     private fun isFreshFix(location: GeoLocation): Boolean =
         (nowMillis() - location.timestampMillis) / 1000 <= MAX_IMMEDIATE_FIX_AGE_SECONDS
