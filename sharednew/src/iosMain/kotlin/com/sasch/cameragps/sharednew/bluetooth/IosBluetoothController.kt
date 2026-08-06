@@ -7,6 +7,8 @@ import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.autoReconnectStore
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.clearPairingFailedDevice
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.connect
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.disconnect
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.reconnectToPersistedPeripherals
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
@@ -22,11 +24,15 @@ import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
@@ -42,7 +48,7 @@ import platform.Foundation.NSError
 import platform.Foundation.NSNumber
 import platform.Foundation.NSUUID
 import platform.darwin.NSObject
-import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * iOS Bluetooth controller — thin shell backed by CoreBluetooth.
@@ -134,9 +140,28 @@ object IosBluetoothController : BluetoothController {
      */
     private val restoredAwaitingPowerOn = mutableListOf<CBPeripheral>()
 
-    // Pending callbacks
-    private val connectCallbacks = mutableMapOf<String, (Boolean) -> Unit>()
-    private val disconnectCallbacks = mutableMapOf<String, () -> Unit>()
+    /**
+     * Central-level connection lifecycle, one stream for all devices.
+     * [connect]/[disconnect] await their device's event here instead of parking
+     * per-device callbacks — the same pattern the transport layer uses for GATT
+     * operations. Multiple concurrent waiters per device are fine.
+     */
+    private sealed interface ConnectionEvent {
+        val identifier: String
+
+        data class Connected(override val identifier: String) : ConnectionEvent
+        data class ConnectFailed(override val identifier: String) : ConnectionEvent
+        data class Disconnected(override val identifier: String) : ConnectionEvent
+    }
+
+    private val connectionEvents = MutableSharedFlow<ConnectionEvent>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** CoreBluetooth connects never time out on their own; bound the callers. */
+    private const val CONNECT_TIMEOUT_MS = 30_000L
+    private const val DISCONNECT_TIMEOUT_MS = 10_000L
 
     private var appEnabled = IosAppPreferences.isAppEnabled()
     private val deviceEnabledOverrides = mutableMapOf<String, Boolean>()
@@ -306,7 +331,7 @@ object IosBluetoothController : BluetoothController {
             autoReconnectStore.add(id)
             // The orchestrator drives service discovery + handshake from here
             transport.attachPeripheral(didConnectPeripheral)
-            connectCallbacks.remove(id)?.invoke(true)
+            connectionEvents.tryEmit(ConnectionEvent.Connected(id))
             refreshDeviceList()
         }
 
@@ -317,7 +342,7 @@ object IosBluetoothController : BluetoothController {
             error: NSError?,
         ) {
             val id = didFailToConnectPeripheral.identifier.UUIDString
-            connectCallbacks.remove(id)?.invoke(false)
+            connectionEvents.tryEmit(ConnectionEvent.ConnectFailed(id))
             controllerScope.launch {
                  if (shouldAutoReconnect(id)) {
                      central.connectPeripheral(didFailToConnectPeripheral, options = null)
@@ -335,11 +360,10 @@ object IosBluetoothController : BluetoothController {
         ) {
             val id = didDisconnectPeripheral.identifier.UUIDString
             connected.remove(id)
-            connectCallbacks.remove(id)?.invoke(false)
-            disconnectCallbacks.remove(id)?.invoke()
             // Emits Disconnected → orchestrator clears the session, cancels queued
             // operations and re-evaluates location tracking
             transport.detachPeripheral(id)
+            connectionEvents.tryEmit(ConnectionEvent.Disconnected(id))
 
             controllerScope.launch {
                 if (shouldAutoReconnect(id)) {
@@ -381,21 +405,30 @@ object IosBluetoothController : BluetoothController {
             return false
         }
         ensureDeviceRecord(resolvedIdentifier, peripheral.name)
-        return suspendCancellableCoroutine { cont ->
-            connectCallbacks[resolvedIdentifier] = { success ->
-                if (cont.isActive) cont.resume(success)
+
+        var event: ConnectionEvent? = null
+        try {
+            event = withTimeoutOrNull(CONNECT_TIMEOUT_MS.milliseconds) {
+                connectionEvents
+                    .onSubscription {
+                        // Initiate only once the waiter is subscribed so the
+                        // completion event cannot slip past it
+                        central.connectPeripheral(
+                            peripheral,
+                            options = mapOf(CBConnectPeripheralOptionEnableAutoReconnect to true)
+                        )
+                    }
+                    .first { it.identifier.equals(resolvedIdentifier, ignoreCase = true) }
             }
-            central.connectPeripheral(
-                peripheral,
-                options = mapOf(CBConnectPeripheralOptionEnableAutoReconnect to true)
-            )
-            cont.invokeOnCancellation {
-                connectCallbacks.remove(resolvedIdentifier)
-                if (central.state == CBManagerStatePoweredOn) {
-                    central.cancelPeripheralConnection(peripheral)
-                }
+        } finally {
+            // No event means timeout or caller cancellation — withdraw the pending
+            // connect. On ConnectFailed the attempt is already dead, and cancelling
+            // would kill the auto-reconnect didFailToConnect may just have issued.
+            if (event == null && central.state == CBManagerStatePoweredOn) {
+                central.cancelPeripheralConnection(peripheral)
             }
         }
+        return event is ConnectionEvent.Connected
     }
 
     override suspend fun disconnect(identifier: String) {
@@ -415,14 +448,15 @@ object IosBluetoothController : BluetoothController {
             refreshDeviceList()
             return
         }
-        suspendCancellableCoroutine { cont ->
-            disconnectCallbacks[resolvedIdentifier] = {
-                if (cont.isActive) cont.resume(Unit)
-            }
-            central.cancelPeripheralConnection(peripheral)
-            cont.invokeOnCancellation {
-                disconnectCallbacks.remove(resolvedIdentifier)
-            }
+        // Best effort: a pending (never-established) connect produces no
+        // didDisconnect callback when cancelled — return after the timeout
+        withTimeoutOrNull(DISCONNECT_TIMEOUT_MS.milliseconds) {
+            connectionEvents
+                .onSubscription { central.cancelPeripheralConnection(peripheral) }
+                .first {
+                    it is ConnectionEvent.Disconnected &&
+                            it.identifier.equals(resolvedIdentifier, ignoreCase = true)
+                }
         }
     }
 
@@ -520,10 +554,11 @@ object IosBluetoothController : BluetoothController {
         orchestrator.shutdownAll()
         transport.detachAll()
 
-        connectCallbacks.values.forEach { it(false) }
-        connectCallbacks.clear()
-        disconnectCallbacks.values.forEach { it() }
-        disconnectCallbacks.clear()
+        // Cancelled pending connects produce no CoreBluetooth callback — resolve
+        // every parked connect()/disconnect() waiter with a synthetic disconnect.
+        (connected.keys + discovered.keys).forEach {
+            connectionEvents.tryEmit(ConnectionEvent.Disconnected(it))
+        }
 
         connected.clear()
 
@@ -633,6 +668,10 @@ object IosBluetoothController : BluetoothController {
     // ---------------------------------------------------------------------------
 
     private suspend fun shouldAutoReconnect(id: String): Boolean {
+        // A camera that rejected pairing is disconnected on purpose; reconnecting
+        // would restart the pairing gate and loop the camera's pairing prompt.
+        // Cleared when the user dismisses the dialog or a handshake succeeds.
+        if (id.equals(pairingFailedIdentifier, ignoreCase = true)) return false
         return appEnabled &&
                 autoReconnectStore.contains(id) &&
                 central.state == CBManagerStatePoweredOn &&
