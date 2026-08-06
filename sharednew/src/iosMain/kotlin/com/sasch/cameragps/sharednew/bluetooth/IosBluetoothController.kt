@@ -8,6 +8,7 @@ import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.autoReconnectStore
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.clearPairingFailedDevice
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.reconnectToPersistedPeripherals
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
 import com.sasch.cameragps.sharednew.database.LogDatabase
@@ -51,7 +52,8 @@ import kotlin.coroutines.resume
  * This class owns only:
  * - CBCentralManager + central delegate wiring & state restoration
  * - Scanning (Sony manufacturer-ID filter) and connect/disconnect plumbing
- * - Auto-reconnect persistence ([IosAutoReconnectStore])
+ * - Auto-reconnect of saved devices (device database; the legacy
+ *   [IosAutoReconnectStore] is kept in sync only for migration)
  * - App/device-enabled state and the device list for the UI
  *
  * Call [ensureInitialized] from AppDelegate as early as possible.
@@ -123,6 +125,14 @@ object IosBluetoothController : BluetoothController {
     // UUID string -> CBPeripheral
     private val discovered = mutableMapOf<String, CBPeripheral>()
     private val connected = mutableMapOf<String, CBPeripheral>()
+
+    /**
+     * Peripherals handed back by state restoration before the central reported
+     * PoweredOn. Announcing them (attach → discovery) or cancelling them must
+     * wait for PoweredOn — CoreBluetooth drops both discoverServices and
+     * cancelPeripheralConnection issued earlier.
+     */
+    private val restoredAwaitingPowerOn = mutableListOf<CBPeripheral>()
 
     // Pending callbacks
     private val connectCallbacks = mutableMapOf<String, (Boolean) -> Unit>()
@@ -220,8 +230,11 @@ object IosBluetoothController : BluetoothController {
 
         override fun centralManagerDidUpdateState(central: CBCentralManager) {
             if (central.state == CBManagerStatePoweredOn) {
+                val restored = restoredAwaitingPowerOn.toList()
+                restoredAwaitingPowerOn.clear()
                 if (!appEnabled) {
                     stopScanIfNeeded()
+                    restored.forEach { central.cancelPeripheralConnection(it) }
                     cancelAllKnownConnections()
                     controllerScope.launch {
                         autoReconnectStore.loadFromDisk()
@@ -235,6 +248,7 @@ object IosBluetoothController : BluetoothController {
                     central.scanForPeripheralsWithServices(serviceUUIDs = null, options = null)
                 }
                 controllerScope.launch {
+                    attachRestoredPeripherals(restored)
                     reconnectToPersistedPeripherals()
                 }
             }
@@ -246,46 +260,24 @@ object IosBluetoothController : BluetoothController {
                 willRestoreState[CBCentralManagerRestoredStatePeripheralsKey] as? List<*>
                     ?: return
 
-            if (appEnabled) {
-                restoredPeripherals.forEach { any ->
-                    val peripheral = any as? CBPeripheral ?: return@forEach
-                    // Re-set the delegate before the first suspension: CoreBluetooth
-                    // delivers the callbacks that relaunched the app right after
+            restoredPeripherals.forEach { any ->
+                val peripheral = any as? CBPeripheral ?: return@forEach
+                if (appEnabled) {
+                    val id = peripheral.identifier.UUIDString
+                    // Re-set the delegate right away: CoreBluetooth delivers the
+                    // callbacks that relaunched the app immediately after
                     // restoration, and they are dropped while the delegate is unset.
                     if (peripheral.state == CBPeripheralStateConnected) {
                         transport.registerPeripheral(peripheral)
+                        connected[id] = peripheral
                     }
-                    controllerScope.launch {
-                        val id = peripheral.identifier.UUIDString
-                        if (!isDeviceEnabled(id)) {
-                            if (central.state == CBManagerStatePoweredOn) {
-                                central.cancelPeripheralConnection(peripheral)
-                            }
-                            return@launch
-                        }
-
-                        discovered[id] = peripheral
-                        if (peripheral.state == CBPeripheralStateConnected) {
-                            connected[id] = peripheral
-                            /**
-                             * A peripheral restored already connected gets no
-                             * didConnectPeripheral — announce it so the orchestrator
-                             * runs discovery + handshake
-                             */
-                            transport.attachPeripheral(peripheral)
-                        }
-                        refreshDeviceList()
-                    }
+                    discovered[id] = peripheral
                 }
-                refreshDeviceList()
-            } else {
-                restoredPeripherals.forEach { any ->
-                    val peripheral = any as? CBPeripheral ?: return@forEach
-                    if (central.state == CBManagerStatePoweredOn) {
-                        central.cancelPeripheralConnection(peripheral)
-                    }
-                }
+                // Announcing/cancelling is deferred to PoweredOn (see
+                // restoredAwaitingPowerOn) — the central cannot act yet.
+                restoredAwaitingPowerOn += peripheral
             }
+            refreshDeviceList()
         }
 
         override fun centralManager(
@@ -326,11 +318,11 @@ object IosBluetoothController : BluetoothController {
         ) {
             val id = didFailToConnectPeripheral.identifier.UUIDString
             connectCallbacks.remove(id)?.invoke(false)
-            /* controllerScope.launch {
+            controllerScope.launch {
                  if (shouldAutoReconnect(id)) {
                      central.connectPeripheral(didFailToConnectPeripheral, options = null)
                  }
-             }*/
+            }
         }
 
         @ObjCSignatureOverride
@@ -350,9 +342,9 @@ object IosBluetoothController : BluetoothController {
             transport.detachPeripheral(id)
 
             controllerScope.launch {
-                /*  if (shouldAutoReconnect(id)) {
+                if (shouldAutoReconnect(id)) {
                       central.connectPeripheral(didDisconnectPeripheral, options = null)
-                  }*/
+                }
             }
             refreshDeviceList()
         }
@@ -474,10 +466,36 @@ object IosBluetoothController : BluetoothController {
         }
 
         if (appEnabled) {
-            controllerScope.launch {
-                reconnectToPersistedPeripherals()
-            }
+            requestConnection(normalized)
         }
+    }
+
+    /**
+     * Issue a (pending) connection request for a single device. Used when the
+     * device is re-enabled instead of [reconnectToPersistedPeripherals]: only
+     * this device changed, and the targeted connect relies on the already
+     * updated in-memory enabled state rather than the sweep's database re-sync.
+     */
+    // FIXME do we still need this or use reconnectToPersistedPeripherals() instead?
+    private fun requestConnection(identifier: String) {
+        // Not powered on: the next power-on reconnects all saved devices anyway
+        if (central.state != CBManagerStatePoweredOn) return
+        val resolvedIdentifier = resolveKnownIdentifier(identifier)
+        if (connected.containsKey(resolvedIdentifier)) return
+        val peripheral = discovered[resolvedIdentifier]
+            ?: central.retrievePeripheralsWithIdentifiers(listOf(NSUUID(uUIDString = identifier)))
+                .filterIsInstance<CBPeripheral>()
+                .firstOrNull()
+            ?: return
+        discovered[peripheral.identifier.UUIDString] = peripheral
+        central.connectPeripheral(
+            peripheral,
+            options = mapOf(
+                CBConnectPeripheralOptionNotifyOnConnectionKey to true,
+                // CBConnectPeripheralOptionEnableAutoReconnect to true
+            ),
+        )
+        refreshDeviceList()
     }
 
     suspend fun applyAppEnabledState(enabled: Boolean) {
@@ -526,11 +544,34 @@ object IosBluetoothController : BluetoothController {
         }
     }
 
+    /**
+     * A peripheral restored already connected gets no didConnectPeripheral —
+     * announce it here so the orchestrator runs discovery + handshake. This
+     * must not happen during willRestoreState: discoverServices issued before
+     * the central is powered on is dropped and the session dead-ends in a
+     * discovery timeout. Disabled devices are cancelled instead (also only
+     * possible once powered on). Runs before [reconnectToPersistedPeripherals]
+     * so the sweep sees restored devices as connected and skips them.
+     */
+    private suspend fun attachRestoredPeripherals(restored: List<CBPeripheral>) {
+        restored.forEach { peripheral ->
+            val id = peripheral.identifier.UUIDString
+            if (!isDeviceEnabled(id)) {
+                central.cancelPeripheralConnection(peripheral)
+            } else if (peripheral.state == CBPeripheralStateConnected) {
+                transport.attachPeripheral(peripheral)
+            }
+        }
+        refreshDeviceList()
+    }
+
     private suspend fun reconnectToPersistedPeripherals() {
         autoReconnectStore.loadFromDisk()
         migrateLegacyDevicesToDatabase()
         syncPersistedDevices()
-        val ids = autoReconnectStore.getAll()
+        // The device database is the source of truth for saved devices; the
+        // NSUserDefaults store is only read above to migrate legacy entries.
+        val ids = persistedDevices.keys.toList()
         if (ids.isEmpty()) return
         val nsuuids = ids.map { NSUUID(uUIDString = it) }
         val peripherals = central.retrievePeripheralsWithIdentifiers(nsuuids)
@@ -546,7 +587,7 @@ object IosBluetoothController : BluetoothController {
                     peripheral,
                     options = mapOf(
                         CBConnectPeripheralOptionNotifyOnConnectionKey to true,
-                        CBConnectPeripheralOptionEnableAutoReconnect to true
+                        // CBConnectPeripheralOptionEnableAutoReconnect to true
                     ),
                 )
             }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 
 sealed interface LocationEvent {
     /** First fix of the session was accepted. */
@@ -85,8 +86,6 @@ class LocationTransmissionManager(
         latest = null
     }
 
-    // ---- internals ----
-
     private fun startIfNeeded() {
         if (!isTransmissionAllowed()) return
         if (_isActive.value) return
@@ -106,7 +105,7 @@ class LocationTransmissionManager(
         }
         periodicJob = scope.launch {
             while (isActive) {
-                delay(SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS)
+                delay(SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS.milliseconds)
                 val current = latest
                 if (current != null) {
                     log.d { "Periodic timer – sending location to ready sessions" }

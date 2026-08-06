@@ -232,7 +232,7 @@
     <string name="enable_remote_control">Fernbedienung aktivieren</string>
     <!-- Troubleshooting guide (visual step-by-step screen, shared by both platforms) -->
     <string name="guide_title">Fehlerbehebung</string>
-    <string name="guide_intro">Schritt-für-Schritt-Lösungen für die häufigsten Probleme.</string>
+    <string name="guide_intro">Tippe hier für Schritt-für-Schritt-Lösungen für die häufigsten Probleme.</string>
     <string name="guide_open_button">Fehlerbehebung öffnen</string>
     <string name="guide_location_link_title">Standort- und Zeitzonen-Verknüpfung aktivieren (ältere Kameras)</string>
     <string name="guide_location_link_description">Bei Kameras mit dem älteren Menü-Layout (z. B. α6400, ZV-E10, α6100, α7 III) muss die Standortverknüpfung manuell eingeschaltet werden. Neuere Kameras aktivieren sie automatisch, sobald sich die App verbindet.</string>

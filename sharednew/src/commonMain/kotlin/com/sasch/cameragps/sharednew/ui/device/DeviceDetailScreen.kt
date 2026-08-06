@@ -63,8 +63,7 @@ fun DeviceDetailContent(
                 checked = state.isDeviceEnabled,
                 enabled = !state.isAlwaysOnEnabled && state.buttonEnabled,
                 onCheckedChange = { enabled ->
-                    viewModel.setDeviceEnabled(enabled, deviceId)
-                    onDeviceEnabledChanged?.invoke(enabled)
+                    viewModel.setDeviceEnabled(enabled, deviceId, onDeviceEnabledChanged)
                 },
             )
         }

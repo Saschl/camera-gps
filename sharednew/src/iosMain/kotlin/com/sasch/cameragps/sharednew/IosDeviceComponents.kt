@@ -44,6 +44,7 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.app_disabled_message
 import cameragps.sharednew.generated.resources.app_disabled_title
 import cameragps.sharednew.generated.resources.app_settings
+import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.connected
 import cameragps.sharednew.generated.resources.delete
@@ -76,6 +77,7 @@ import cameragps.sharednew.generated.resources.show_details
 import cameragps.sharednew.generated.resources.tap_to_connect
 import cameragps.sharednew.generated.resources.transmission_active
 import cameragps.sharednew.generated.resources.transmission_inactive
+import cameragps.sharednew.generated.resources.trigger_shutter
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.ui.TransmissionDot
 import org.jetbrains.compose.resources.painterResource
@@ -416,8 +418,10 @@ private fun DeviceCard(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         onClick = {
-            if (device.isConnected) {
-                onTriggerRemoteShutter()
+            // Saved devices connect automatically; a tap opens their settings
+            // (mirrors the Android list). Unsaved devices keep tap-to-pair.
+            if (device.isSaved) {
+                onOpenDetails()
             } else {
                 onConnect()
             }
@@ -438,12 +442,6 @@ private fun DeviceCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    /* val isShutterEnabled = device.isConnected && device.isRemoteFeatureActive
-                     if (device.isConnected) {
-                         Button(onClick = onTriggerRemoteShutter, enabled = isShutterEnabled) {
-                             Text(stringResource(Res.string.trigger_shutter))
-                         }
-                     }*/
                     val isTransmissionActive = device.isTransmissionActive
                     val transmissionStatusDescription = if (isTransmissionActive) {
                         stringResource(Res.string.transmission_active)
@@ -457,6 +455,17 @@ private fun DeviceCard(
                             contentDescription = transmissionStatusDescription
                         }
                     )
+                    if (device.isSaved) {
+                        IconButton(
+                            enabled = device.isRemoteFeatureActive,
+                            onClick = onTriggerRemoteShutter,
+                        ) {
+                            Icon(
+                                painterResource(Res.drawable.camera_24px),
+                                contentDescription = stringResource(Res.string.trigger_shutter)
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = onOpenDetails,
                     ) {
@@ -467,25 +476,31 @@ private fun DeviceCard(
                     }
                 }
             }
-            Text(
-                text = if (device.isConnected) {
+            val statusText = when {
+                device.isConnected ->
                     stringResource(Res.string.connected) + " - " +
-                    if (device.isRemoteFeatureActive) {
-                        stringResource(Res.string.remote_feature_active)
+                            if (device.isRemoteFeatureActive) {
+                                stringResource(Res.string.remote_feature_active)
+                            } else {
+                                stringResource(Res.string.remote_feature_inactive)
+                            }
+
+                !device.isSaved -> stringResource(Res.string.tap_to_connect)
+
+                else -> null
+            }
+            if (statusText != null) {
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (device.isConnected) {
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        stringResource(Res.string.remote_feature_inactive)
-                    }
-                } else {
-                    stringResource(Res.string.tap_to_connect)
-                },
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (device.isConnected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
         }
     }
 }

@@ -149,7 +149,7 @@
     <string name="faq_background_work_answer">Yes, once properly configured:\n• The service runs in the background to maintain GPS sync\n• Make sure to disable battery optimization\n• The app will show a persistent notification when active\n• GPS data is continuously sent to your connected camera</string>
     <!-- Troubleshooting guide (visual step-by-step screen, shared by both platforms) -->
     <string name="guide_title">Troubleshooting Guide</string>
-    <string name="guide_intro">Step-by-step fixes for the most common issues.</string>
+    <string name="guide_intro">Tap here for Step-by-step fixes for the most common issues.</string>
     <string name="guide_open_button">Open troubleshooting guide</string>
     <string name="guide_location_link_title">Enable location &amp; time zone linking (older cameras)</string>
     <string name="guide_location_link_description">On cameras with the older menu layout (e.g. α6400, ZV-E10, α6100, α7 III) location linking must be switched on manually. Newer cameras activate it automatically when the app connects.</string>

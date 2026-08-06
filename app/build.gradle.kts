@@ -35,8 +35,8 @@ android {
         applicationId = "com.saschl.cameragps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 133
-        versionName = "v1.3.1"
+        versionCode = 140
+        versionName = "v1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

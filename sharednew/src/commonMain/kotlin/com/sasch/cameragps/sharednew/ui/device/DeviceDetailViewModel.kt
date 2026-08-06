@@ -21,9 +21,16 @@ class DeviceDetailViewModel(
         }
     }
 
-    fun setDeviceEnabled(isEnabled: Boolean, device: String) {
+    fun setDeviceEnabled(
+        isEnabled: Boolean,
+        device: String,
+        onCompleted: ((Boolean) -> Unit)? = null,
+    ) {
         viewModelScope.launch {
             stateStore.setDeviceEnabled(device, isEnabled)
+            // Only notify once the write is committed: platform reactions
+            // (reconnect, service shutdown) read the flag back from the database
+            onCompleted?.invoke(isEnabled)
         }
     }
 
