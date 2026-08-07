@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.always_on_description
+import cameragps.sharednew.generated.resources.dialog_ok
 import cameragps.sharednew.generated.resources.enableConstantly
 import cameragps.sharednew.generated.resources.enable_device
 import cameragps.sharednew.generated.resources.enable_remote_control
@@ -32,9 +37,12 @@ import cameragps.sharednew.generated.resources.handshake_delay_off
 import cameragps.sharednew.generated.resources.handshake_delay_seconds
 import cameragps.sharednew.generated.resources.handshake_delay_title
 import cameragps.sharednew.generated.resources.hint_if_issues_after_switching
+import cameragps.sharednew.generated.resources.info_24px
 import cameragps.sharednew.generated.resources.remote_control_hint
+import cameragps.sharednew.generated.resources.setting_info
 import com.sasch.cameragps.sharednew.util.KotlinPlatform
 import com.sasch.cameragps.sharednew.util.currentPlatform
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
@@ -81,8 +89,6 @@ fun DeviceDetailContent(
 
 
         if (currentPlatform == KotlinPlatform.Android) {
-
-
             item {
                 DeviceToggleRow(
                     title = stringResource(Res.string.enableConstantly),
@@ -91,6 +97,8 @@ fun DeviceDetailContent(
                     onCheckedChange = { enabled ->
                         viewModel.setAlwaysOnEnabled(enabled, deviceId)
                     },
+                    infoText = stringResource(Res.string.always_on_description) +
+                            "\n\n" + stringResource(Res.string.hint_if_issues_after_switching),
                 )
             }
         }
@@ -103,14 +111,7 @@ fun DeviceDetailContent(
                 onCheckedChange = { enabled ->
                     viewModel.setRemoteControlStatus(enabled, deviceId)
                 },
-            )
-        }
-
-        item {
-            Text(
-                text = stringResource(Res.string.remote_control_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                infoText = stringResource(Res.string.remote_control_hint),
             )
         }
 
@@ -121,34 +122,37 @@ fun DeviceDetailContent(
                 onDelayChanged = { delayMs ->
                     viewModel.setHandshakeDelay(delayMs, deviceId)
                 },
+                infoText = stringResource(Res.string.handshake_delay_description),
             )
         }
+    }
+}
 
-        item {
-            Text(
-                text = stringResource(Res.string.handshake_delay_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        if (currentPlatform == KotlinPlatform.Android) {
-            item {
-                Text(
-                    text = stringResource(Res.string.always_on_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            item {
-                Text(
-                    text = stringResource(Res.string.hint_if_issues_after_switching),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
+/**
+ * Info affordance for a setting row: a small icon button that opens a dialog
+ * with the setting's explanation (replaces the former inline hint texts).
+ */
+@Composable
+private fun SettingInfoButton(title: String, text: String) {
+    var showDialog by remember { mutableStateOf(false) }
+    IconButton(onClick = { showDialog = true }) {
+        Icon(
+            painterResource(Res.drawable.info_24px),
+            contentDescription = stringResource(Res.string.setting_info),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(title) },
+            text = { Text(text) },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text(stringResource(Res.string.dialog_ok))
+                }
+            },
+        )
     }
 }
 
@@ -157,6 +161,7 @@ private fun HandshakeDelaySlider(
     delayMs: Long,
     enabled: Boolean,
     onDelayChanged: (Long) -> Unit,
+    infoText: String? = null,
 ) {
     // Local value while dragging; persisted only on release
     var sliderSeconds by remember(delayMs) { mutableStateOf((delayMs / 1000L).toFloat()) }
@@ -171,6 +176,12 @@ private fun HandshakeDelaySlider(
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
+            if (infoText != null) {
+                SettingInfoButton(
+                    title = stringResource(Res.string.handshake_delay_title),
+                    text = infoText,
+                )
+            }
             val seconds = sliderSeconds.roundToInt()
             Text(
                 text = if (seconds == 0) {
@@ -200,6 +211,7 @@ private fun DeviceToggleRow(
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    infoText: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -211,6 +223,9 @@ private fun DeviceToggleRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
+        if (infoText != null) {
+            SettingInfoButton(title = title, text = infoText)
+        }
         Switch(
             checked = checked,
             enabled = enabled,

@@ -272,6 +272,8 @@
     <string name="try_again">Try again</string>
     <string name="continue_label">Continue</string>
     <string name="cancel">Cancel</string>
+    <string name="dialog_ok">OK</string>
+    <string name="setting_info">More information</string>
     <string name="enable_auto_start_description">Auto starts the app after a device reboot for configured "Always On" devices.</string>
     <string name="hint_if_issues_after_switching">Note: Due to recent changes in the app, you may need to perform a one-time action if you encounter issues after disabling Always On mode. Simply deactivate and reactivate the device once in these settings. This is only needed once after the app update – subsequent mode changes will work immediately.</string>
     <!-- Sentry Consent Dialog -->

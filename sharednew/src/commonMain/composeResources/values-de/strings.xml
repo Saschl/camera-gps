@@ -201,6 +201,8 @@
     <string name="try_again">Erneut versuchen</string>
     <string name="continue_label">Weiter</string>
     <string name="cancel">Abbrechen</string>
+    <string name="dialog_ok">OK</string>
+    <string name="setting_info">Weitere Informationen</string>
     <string name="enable_auto_start_description">Startet die App nach einem Geräte-Neustart automatisch für Kameras, für die der „Always On"-Modus konfiguriert ist.</string>
     <string name="hint_if_issues_after_switching">Hinweis: Aufgrund von kürzlichen Änderungen in der App kann es nach dem Deaktivieren des „Always On" - Modus erforderlich sein, einmalig eine Aktion durchzuführen. Deaktivieren und reaktivieren Sie das Gerät einfach einmal in diesen Einstellungen. Dies ist nur einmal nach dem App-Update nötig – nachfolgende Moduswechsel funktionieren sofort.</string>
     <string name="sentry_consent_title">Helfen Sie, Alpha GPS zu verbessern</string>
