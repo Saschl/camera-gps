@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@astrojs/sitemap": "3.7.3",
-    "astro": "7.1.0",
+    "astro": "7.1.6",
     "typescript": "6.0.3"
   }
 }
