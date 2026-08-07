@@ -220,14 +220,18 @@ class CameraSessionOrchestrator(
                 delay(delayMs.milliseconds)
                 if (registry.get(id) == null || !transport.isConnected(id)) return@launch
             }
-            registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.DiscoveringServices) }
-            when (queue.execute(id, BleOperation.DiscoverServices)) {
-                is BleOperationResult.Success -> sessionCoordinator.beginHandshake(id)
-                is BleOperationResult.Cancelled -> Unit // disconnected meanwhile
-                else -> {
-                    log.e { "Service discovery failed for $id" }
-                    registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.Error) }
-                }
+            runDiscoveryAndHandshake(id)
+        }
+    }
+
+    private suspend fun runDiscoveryAndHandshake(id: String) {
+        registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.DiscoveringServices) }
+        when (queue.execute(id, BleOperation.DiscoverServices)) {
+            is BleOperationResult.Success -> sessionCoordinator.beginHandshake(id)
+            is BleOperationResult.Cancelled -> Unit // disconnected meanwhile
+            else -> {
+                log.e { "Service discovery failed for $id" }
+                registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.Error) }
             }
         }
     }
@@ -306,7 +310,14 @@ class CameraSessionOrchestrator(
         log.w { "Auth error for $identifier, retry $attempts/${pairingPolicy.maxRetries}" }
         registry.updateIfPresent(identifier) { it.copy(pairingRetryCount = attempts) }
         scope.launch {
-            delay(pairingPolicy.retryDelayMs)
+            val delayMs = if (attempts == 1) {
+                pairingPolicy.firstRetryDelayMs
+            } else {
+                pairingPolicy.retryDelayMs
+            }
+            if (delayMs > 0) {
+                delay(delayMs.milliseconds)
+            }
             if (transport.isConnected(identifier)) {
                 retry()
             }

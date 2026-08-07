@@ -64,6 +64,7 @@ class BleOperationQueue(
             for (queued in channel) {
                 if (queued.result.isCompleted) continue // cancelled while parked
 
+                log.d { "${queued.operation.describe()} on $identifier: initiating" }
                 if (!initiate(identifier, queued.operation)) {
                     log.w { "Could not initiate ${queued.operation.describe()} on $identifier" }
                     queued.result.complete(BleOperationResult.NotInitiated)
@@ -72,7 +73,8 @@ class BleOperationQueue(
 
                 pending = queued
                 try {
-                    withTimeout(timeoutFor(queued.operation)) { queued.result.await() }
+                    val result = withTimeout(timeoutFor(queued.operation)) { queued.result.await() }
+                    log.d { "${queued.operation.describe()} on $identifier: ${result.describe()}" }
                 } catch (_: TimeoutCancellationException) {
                     log.w { "${queued.operation.describe()} on $identifier timed out" }
                     queued.result.complete(BleOperationResult.Timeout)
@@ -203,6 +205,14 @@ class BleOperationQueue(
         is BleOperation.Read -> "Read($characteristicUuid)"
         is BleOperation.Subscribe -> "Subscribe($characteristicUuid, enable=$enable)"
         is BleOperation.DiscoverServices -> "DiscoverServices"
+    }
+
+    private fun BleOperationResult.describe(): String = when (this) {
+        is BleOperationResult.Success -> "Success"
+        is BleOperationResult.Failure -> "Failure($status)"
+        BleOperationResult.Timeout -> "Timeout"
+        BleOperationResult.NotInitiated -> "NotInitiated"
+        BleOperationResult.Cancelled -> "Cancelled"
     }
 
     companion object {

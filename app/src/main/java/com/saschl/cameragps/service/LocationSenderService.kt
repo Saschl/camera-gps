@@ -20,6 +20,7 @@ import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.locationTr
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
+import com.sasch.cameragps.sharednew.bluetooth.session.PairingRetryPolicy
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
@@ -67,6 +68,10 @@ class LocationSenderService : LifecycleService() {
             locationSource = AndroidLocationSource(applicationContext),
             deviceDao = deviceDao,
             scope = lifecycleScope,
+            // First auth-error retry immediately: on Android the error only means
+            // encryption is still re-establishing, and the retry queues behind it.
+            // A 3s first delay would stall every reconnect handshake.
+            pairingPolicy = PairingRetryPolicy(firstRetryDelayMs = 0),
         )
     }
 
@@ -178,6 +183,9 @@ class LocationSenderService : LifecycleService() {
             }
 
             is OrchestratorEvent.HandshakeCompleted -> {
+                // Setup is done — the periodic location writes don't need the
+                // short connection interval requested at connect
+                transport.relaxConnection(event.identifier)
                 // Session state reaches the UI through the sessions mirror; a completed
                 // handshake also invalidates a pending pairing-failure hint for the device.
                 if (pairingFailedDevice.value.equals(event.identifier, ignoreCase = true)) {

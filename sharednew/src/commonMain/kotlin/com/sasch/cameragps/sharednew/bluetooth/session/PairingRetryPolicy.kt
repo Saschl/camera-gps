@@ -7,4 +7,11 @@ package com.sasch.cameragps.sharednew.bluetooth.session
 data class PairingRetryPolicy(
     val maxRetries: Int = 3,
     val retryDelayMs: Long = 3_000L,
+    /**
+     * Delay before the FIRST retry; later retries use [retryDelayMs]. Android
+     * passes 0: an auth error on reconnect only means link encryption is still
+     * being re-established, and an immediately re-issued operation queues
+     * behind it in the stack (pre-restructure Android behavior).
+     */
+    val firstRetryDelayMs: Long = retryDelayMs,
 )

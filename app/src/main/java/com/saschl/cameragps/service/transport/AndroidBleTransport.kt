@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattConnectionSettings
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -70,9 +71,25 @@ class AndroidBleTransport(
                 //Timber.w("Device $address is not paired. Cannot connect.")
                 return false
             }
-            val gatt = device.connectGatt(context, true, gattCallback)
-                ?: throw IllegalStateException("Failed to connect to device $address: GATT is null")
-            connections[address] = Connection(gatt)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
+                val gatt = device.connectGatt(
+                    BluetoothGattConnectionSettings.Builder()
+                        .setAutoConnectEnabled(true)
+                        .setTransport(BluetoothDevice.TRANSPORT_LE)
+                        .setAutomaticMtuEnabled(true)
+                        .build(),
+                    context.mainExecutor,
+                    gattCallback
+                )
+                    ?: throw IllegalStateException("Failed to connect to device $address: GATT is null")
+                connections[address] = Connection(gatt)
+
+            } else {
+                val gatt = device.connectGatt(context, true, gattCallback)
+                    ?: throw IllegalStateException("Failed to connect to device $address: GATT is null")
+                connections[address] = Connection(gatt)
+            }
+
         } catch (e: SecurityException) {
             Timber.e("SecurityException while connecting to device $address: ${e.message}")
             return false
@@ -119,6 +136,19 @@ class AndroidBleTransport(
         connections.values.count { it.isActive }
     }
 
+    /**
+     * Drop back to the default connection parameters once the handshake is done —
+     * the periodic location writes do not need the short interval, and holding it
+     * costs battery on both the phone and the camera.
+     */
+    @SuppressLint("MissingPermission")
+    fun relaxConnection(mac: String) {
+        val connection = connections[mac.uppercase()] ?: return
+        if (!connection.gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)) {
+            Timber.w("Could not relax connection priority for %s", mac)
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // BlePeripheralTransport
     // ---------------------------------------------------------------------------
@@ -145,6 +175,9 @@ class AndroidBleTransport(
     override fun initiateRead(identifier: String, characteristicUuid: String): Boolean {
         val connection = connections[identifier.uppercase()] ?: return false
         val characteristic = findCharacteristic(connection.gatt, characteristicUuid) ?: return false
+        // The read forces link re-encryption on a fresh reconnect: a long gap
+        // until the read response is the stack encrypting, not the queue
+        Timber.d("Issuing read of %s to the stack", characteristicUuid)
         return connection.gatt.readCharacteristic(characteristic)
     }
 
@@ -191,6 +224,13 @@ class AndroidBleTransport(
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 Timber.i("Connected to device with status %d", status)
                 connections[address]?.isActive = true
+                // Discovery + handshake are dozens of sequential ATT round trips,
+                // each costing one connection interval (~50ms at the default).
+                // Request the short interval for setup; relaxConnection() drops
+                // it again after the handshake to save battery.
+                if (!gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)) {
+                    Timber.w("Could not request high connection priority for %s", address)
+                }
                 eventChannel.trySend(BleTransportEvent.Connected(address))
                 return
             }
@@ -207,6 +247,30 @@ class AndroidBleTransport(
             }
 
             Timber.d("Ignoring connection callback with status=$status and state=$newState")
+        }
+
+        /**
+         * Hidden in the SDK but dispatched by signature at runtime: reports the
+         * actual negotiated connection parameters (interval unit = 1.25 ms).
+         * Tells us whether the CONNECTION_PRIORITY_HIGH request stuck or the
+         * camera overrode it with its own preferred parameters.
+         */
+        /* @Suppress("unused")
+         fun onConnectionUpdated(
+             gatt: BluetoothGatt,
+             interval: Int,
+             latency: Int,
+             timeout: Int,
+             status: Int,
+         ) {
+             Timber.i(
+                 "Connection updated for %s: interval=%d (%.1f ms), latency=%d, timeout=%d, status=%d",
+                 gatt.device.address, interval, interval * 1.25, latency, timeout, status,
+             )
+         }*/
+
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            Timber.i("MTU changed for %s: mtu=%d status=%d", gatt.device.address, mtu, status)
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -301,6 +365,7 @@ class AndroidBleTransport(
             value: ByteArray,
             status: Int,
         ) {
+            Timber.d("Read response for %s with status %d", characteristic.uuid, status)
             eventChannel.trySend(
                 BleTransportEvent.CharacteristicRead(
                     gatt.device.address.uppercase(),

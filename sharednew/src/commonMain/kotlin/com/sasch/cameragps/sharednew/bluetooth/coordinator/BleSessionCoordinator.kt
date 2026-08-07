@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.bluetooth.coordinator
 
+import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import kotlinx.coroutines.channels.Channel
@@ -22,6 +23,8 @@ class BleSessionCoordinator(
     private val port: BleGattPort,
     private val remoteControlCoordinator: RemoteControlCoordinator,
 ) {
+    private val log = logging()
+
     private val _events = Channel<BleSessionEvent>(Channel.UNLIMITED)
 
     /** Collect this to receive session phase changes and handshake completion events. */
@@ -48,9 +51,11 @@ class BleSessionCoordinator(
         emitPhase(id, BleSessionPhase.DiscoveringServices, remoteActive = false)
 
         if (port.hasCharacteristic(id, SonyBluetoothConstants.CHARACTERISTIC_READ_UUID)) {
+            log.d { "Handshake[$id]: requesting config read" }
             emitPhase(id, BleSessionPhase.ReadingConfig)
             port.readCharacteristic(id, SonyBluetoothConstants.CHARACTERISTIC_READ_UUID)
         } else {
+            log.d { "Handshake[$id]: no config characteristic, skipping read" }
             locationConfigs[id] = LocationDataConfig(shouldSendTimeZoneAndDst = false)
             enableGps(id)
         }
@@ -62,10 +67,12 @@ class BleSessionCoordinator(
     fun onCharacteristicRead(identifier: String, value: ByteArray, success: Boolean) {
         val id = identifier.uppercase()
         if (!success) {
+            log.w { "Handshake[$id]: config read failed, aborting" }
             emitPhase(id, BleSessionPhase.Error)
             return
         }
         val hasTimeZone = RemoteControlCoordinator.hasTimeZoneDstFlag(value)
+        log.d { "Handshake[$id]: config read done (timeZoneAndDst=$hasTimeZone)" }
         locationConfigs[id] = LocationDataConfig(shouldSendTimeZoneAndDst = hasTimeZone)
         enableGps(id)
     }
@@ -169,6 +176,7 @@ class BleSessionCoordinator(
                 SonyBluetoothConstants.CHARACTERISTIC_ENABLE_UNLOCK_GPS_COMMAND
             )
         ) {
+            log.d { "Handshake[$identifier]: writing GPS unlock" }
             emitPhase(identifier, BleSessionPhase.EnablingGps)
             port.writeCharacteristic(
                 identifier,
@@ -176,6 +184,7 @@ class BleSessionCoordinator(
                 SonyBluetoothConstants.GPS_ENABLE_COMMAND,
             )
         } else {
+            log.d { "Handshake[$identifier]: no GPS unlock characteristic, skipping" }
             sendTimeSyncOrComplete(identifier)
         }
     }
@@ -186,6 +195,7 @@ class BleSessionCoordinator(
                 SonyBluetoothConstants.CHARACTERISTIC_ENABLE_LOCK_GPS_COMMAND
             )
         ) {
+            log.d { "Handshake[$identifier]: writing GPS lock" }
             emitPhase(identifier, BleSessionPhase.LockingGps)
             port.writeCharacteristic(
                 identifier,
@@ -193,6 +203,7 @@ class BleSessionCoordinator(
                 SonyBluetoothConstants.GPS_ENABLE_COMMAND,
             )
         } else {
+            log.d { "Handshake[$identifier]: no GPS lock characteristic, skipping" }
             sendTimeSyncOrComplete(identifier)
         }
     }
@@ -203,6 +214,7 @@ class BleSessionCoordinator(
                 SonyBluetoothConstants.TIME_SYNC_CHARACTERISTIC_UUID
             )
         ) {
+            log.d { "Handshake[$identifier]: writing time sync" }
             emitPhase(identifier, BleSessionPhase.SyncingTime)
             val packet = LocationPacketBuilder.buildTimeSyncPacket(PlatformTimeZoneInfo())
             port.writeCharacteristic(
@@ -211,11 +223,13 @@ class BleSessionCoordinator(
                 packet,
             )
         } else {
+            log.d { "Handshake[$identifier]: no time-sync characteristic, skipping" }
             markReadyForTransmission(identifier)
         }
     }
 
     private fun markReadyForTransmission(identifier: String) {
+        log.d { "Handshake[$identifier]: complete, ready for transmission" }
         _events.trySend(BleSessionEvent.HandshakeComplete(identifier))
         emitPhase(identifier, BleSessionPhase.Transmitting)
 
