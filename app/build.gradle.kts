@@ -22,6 +22,11 @@ android {
         }
     }
 
+    // Reproducible builds: native libs (libsqliteJni.so from sqlite-bundled) are
+    // stripped with the NDK's llvm-strip, so CI and F-Droid must use the SAME
+    // NDK. Keep in sync with `ndk:` in the fdroiddata
+    ndkVersion = "29.0.14206865"
+
     androidResources {
         generateLocaleConfig = true
     }
