@@ -14,7 +14,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.getSystemService
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.saschl.cameragps.utils.PreferencesManager
-import com.saschl.cameragps.utils.SentryInit
 import timber.log.Timber
 import java.util.Locale
 
@@ -147,15 +146,6 @@ class CameraDeviceCompanionService : CompanionDeviceService() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Timber.forest().find { it is FileTree } == null) {
-            FileTree.initialize(this)
-            Timber.plant(FileTree(this, PreferencesManager.logLevel(this)))
-            SentryInit.initSentry(this)
-
-            // Set up global exception handler to log crashes
-            val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-            Thread.setDefaultUncaughtExceptionHandler(GlobalExceptionHandler(defaultHandler))
-        }
         Timber.i("CDM started")
     }
 

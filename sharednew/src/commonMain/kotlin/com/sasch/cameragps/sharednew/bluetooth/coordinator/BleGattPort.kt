@@ -47,6 +47,12 @@ interface BleGattPort {
     fun setRemoteFeatureActive(identifier: String, active: Boolean)
 
     /**
+     * Update the stored shutter-sequence-running state for device [identifier]
+     * (drives the shutter button feedback in both UIs).
+     */
+    fun setShutterSequenceActive(identifier: String, active: Boolean)
+
+    /**
      * Read the value of [characteristicUuid] on device [identifier].
      * The result arrives asynchronously via the platform's characteristic-read callback.
      * Returns `true` if the read was successfully initiated.

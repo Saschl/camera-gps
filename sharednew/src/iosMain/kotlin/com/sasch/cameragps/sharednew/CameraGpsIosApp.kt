@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.cancel_button
@@ -59,6 +60,8 @@ import com.sasch.cameragps.sharednew.database.logging.DatabaseLogger
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.logging.IosLogFormatter
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
+import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListViewModel
+import com.sasch.cameragps.sharednew.ui.devicelist.IosDeviceListDataSource
 import com.sasch.cameragps.sharednew.ui.logs.SharedLogViewerScreen
 import com.sasch.cameragps.sharednew.ui.welcome.SharedWelcomeScreen
 import kotlinx.coroutines.launch
@@ -87,6 +90,10 @@ internal fun CameraGpsIosApp() {
     val bluetoothController = IosBluetoothController
     val realDevices by bluetoothController.devices.collectAsState()
     val devices = if (SCREENSHOT_MODE) mockDevices else realDevices
+    val listViewModel: DeviceListViewModel = viewModel {
+        DeviceListViewModel(IosDeviceListDataSource)
+    }
+    val listItems by listViewModel.items.collectAsState()
     val scope = rememberCoroutineScope()
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val logRepository = remember { LogRepository(getDatabaseBuilder()) }
@@ -242,6 +249,7 @@ internal fun CameraGpsIosApp() {
             ) {
                 DeviceListContent(
                     devices = devices,
+                    items = listItems,
                     isAppEnabled = isAppEnabled,
                     isScanning = autoScanEnabled,
                     onOpenSettings = { currentScreen = IosScreen.Settings },

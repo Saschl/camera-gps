@@ -19,11 +19,11 @@ import com.sasch.cameragps.sharednew.bluetooth.transport.BlePeripheralTransport
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleTransportEvent
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -74,8 +74,18 @@ class CameraSessionOrchestrator(
         isTransmissionAllowed = isTransmissionAllowed,
     )
 
-    private val _events = Channel<OrchestratorEvent>(Channel.UNLIMITED)
-    val events: Flow<OrchestratorEvent> = _events.receiveAsFlow()
+    /**
+     * SharedFlow, not a Channel: it supports several collectors (Android's app
+     * graph and service both subscribe) and drops events while nobody collects
+     * (a stopped Android service must not replay stale sounds on restart).
+     * Subscribers must attach before the first connect — true for both shells,
+     * which subscribe during construction on the main thread.
+     */
+    private val _events = MutableSharedFlow<OrchestratorEvent>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val events: SharedFlow<OrchestratorEvent> = _events
 
     val sessions: StateFlow<Map<String, CameraSession>> get() = registry.sessions
 
@@ -97,16 +107,13 @@ class CameraSessionOrchestrator(
             sessionCoordinator.events.collect { handleSessionEvent(it) }
         }
         scope.launch {
-            remoteControl.events.collect { handleSessionEvent(it) }
-        }
-        scope.launch {
             locationManager.events.collect { event ->
                 when (event) {
                     LocationEvent.FirstFixAcquired ->
-                        _events.trySend(OrchestratorEvent.FirstLocationAcquired)
+                        _events.tryEmit(OrchestratorEvent.FirstLocationAcquired)
 
                     LocationEvent.NoLocationAvailable ->
-                        _events.trySend(OrchestratorEvent.LocationUnavailable)
+                        _events.tryEmit(OrchestratorEvent.LocationUnavailable)
                 }
             }
         }
@@ -179,7 +186,7 @@ class CameraSessionOrchestrator(
             is BleTransportEvent.Disconnected -> {
                 log.i { "Device ${event.identifier} disconnected (status=${event.statusCode})" }
                 clearDevice(event.identifier)
-                _events.trySend(OrchestratorEvent.DeviceDisconnected(event.identifier.uppercase()))
+                _events.tryEmit(OrchestratorEvent.DeviceDisconnected(event.identifier.uppercase()))
             }
 
             is BleTransportEvent.CharacteristicWritten -> handleWritten(event)
@@ -209,7 +216,7 @@ class CameraSessionOrchestrator(
                 hasRetriedConfigRead = false,
             )
         }
-        _events.trySend(OrchestratorEvent.DeviceConnected(id))
+        _events.tryEmit(OrchestratorEvent.DeviceConnected(id))
 
         scope.launch {
             val delayMs = runCatching { deviceDao.getHandshakeDelayMs(id) }.getOrNull() ?: 0L
@@ -304,7 +311,7 @@ class CameraSessionOrchestrator(
         val attempts = session.pairingRetryCount + 1
         if (attempts > pairingPolicy.maxRetries) {
             log.e { "Pairing retries exhausted for $identifier" }
-            _events.trySend(OrchestratorEvent.PairingFailed(identifier))
+            _events.tryEmit(OrchestratorEvent.PairingFailed(identifier))
             return
         }
         log.w { "Auth error for $identifier, retry $attempts/${pairingPolicy.maxRetries}" }
@@ -335,23 +342,10 @@ class CameraSessionOrchestrator(
 
     private suspend fun handleSessionEvent(event: BleSessionEvent) {
         when (event) {
-            is BleSessionEvent.PhaseChanged -> {
-                registry.updateIfPresent(event.identifier) { session ->
-                    session.copy(
-                        phase = event.phase,
-                        remoteFeatureActive = event.remoteActive
-                            ?: session.remoteFeatureActive,
-                    )
-                }
-            }
+            is BleSessionEvent.PhaseChanged ->
+                registry.updateIfPresent(event.identifier) { it.copy(phase = event.phase) }
 
             is BleSessionEvent.HandshakeComplete -> handleHandshakeComplete(event.identifier)
-
-            is BleSessionEvent.RemoteFeatureActivated ->
-                registry.updateIfPresent(event.identifier) { it.copy(remoteFeatureActive = true) }
-
-            is BleSessionEvent.RemoteFeatureDeactivated ->
-                registry.updateIfPresent(event.identifier) { it.copy(remoteFeatureActive = false) }
         }
     }
 
@@ -370,6 +364,6 @@ class CameraSessionOrchestrator(
         if (remoteEnabled) {
             remoteControl.startRemoteStatusMonitoring(id)
         }
-        _events.trySend(OrchestratorEvent.HandshakeCompleted(id))
+        _events.tryEmit(OrchestratorEvent.HandshakeCompleted(id))
     }
 }

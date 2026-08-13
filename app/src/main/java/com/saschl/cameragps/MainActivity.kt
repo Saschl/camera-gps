@@ -30,8 +30,6 @@ import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.ui.logs.SharedLogViewerScreen
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
-import com.saschl.cameragps.service.FileTree
-import com.saschl.cameragps.service.GlobalExceptionHandler
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.HelpScreen
@@ -42,7 +40,6 @@ import com.saschl.cameragps.ui.device.CameraDeviceManager
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
 import com.saschl.cameragps.ui.settings.SettingsScreen
 import com.saschl.cameragps.utils.PreferencesManager
-import com.saschl.cameragps.utils.SentryInit
 import com.saschl.cameragps.utils.logging.AndroidLogFormatter
 import kotlinx.serialization.Serializable
 import timber.log.Timber
@@ -53,24 +50,6 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
-        // Sentry will be initialized by the consent dialog or if already consented
-        if (PreferencesManager.sentryEnabled(this) && PreferencesManager.isSentryConsentDialogDismissed(
-                this
-            )
-        ) {
-            SentryInit.initSentry(this)
-        }
-
-        if (Timber.forest().find { it is FileTree } == null) {
-            val logLevel = PreferencesManager.logLevel(this)
-            FileTree.initialize(this)
-            Timber.plant(FileTree(this, logLevel))
-
-            // Set up global exception handler to log crashes
-            val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-            Thread.setDefaultUncaughtExceptionHandler(GlobalExceptionHandler(defaultHandler))
-        }
 
         setContent {
             CameraGpsTheme {

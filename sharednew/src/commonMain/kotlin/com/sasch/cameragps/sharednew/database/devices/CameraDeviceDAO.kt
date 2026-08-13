@@ -5,12 +5,17 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy.Companion.IGNORE
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CameraDeviceDAO {
 
     @Query("SELECT * FROM camera_devices")
     suspend fun getAllCameraDevices(): List<CameraDevice>
+
+    /** Reactive variant for UI state (re-emits on every table change). */
+    @Query("SELECT * FROM camera_devices")
+    fun observeAllDevices(): Flow<List<CameraDevice>>
 
     @Insert(onConflict = IGNORE)
     suspend fun insertDevice(device: CameraDevice)

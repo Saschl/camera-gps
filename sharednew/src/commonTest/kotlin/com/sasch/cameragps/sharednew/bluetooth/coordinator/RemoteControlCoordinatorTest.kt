@@ -138,6 +138,7 @@ private class FakeBleGattPort : BleGattPort {
     val connectedDevices = mutableSetOf<String>()
     val devicesWithRemoteControl = mutableSetOf<String>()
     val remoteActiveDevices = mutableSetOf<String>()
+    val shutterActiveDevices = mutableSetOf<String>()
     val writtenCharacteristics = mutableListOf<Triple<String, String, ByteArray>>()
     val subscriptions = mutableListOf<Pair<String, String>>()
 
@@ -170,5 +171,14 @@ private class FakeBleGattPort : BleGattPort {
     override fun setRemoteFeatureActive(identifier: String, active: Boolean) {
         if (active) remoteActiveDevices.add(identifier) else remoteActiveDevices.remove(identifier)
     }
+
+    override fun setShutterSequenceActive(identifier: String, active: Boolean) {
+        if (active) shutterActiveDevices.add(identifier) else shutterActiveDevices.remove(identifier)
+    }
+
+    override fun readCharacteristic(identifier: String, characteristicUuid: String): Boolean = true
+
+    override fun hasCharacteristic(identifier: String, characteristicUuid: String): Boolean =
+        identifier in devicesWithRemoteControl
 }
 

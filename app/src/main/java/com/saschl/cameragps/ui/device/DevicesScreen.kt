@@ -58,6 +58,7 @@ fun DevicesScreen(
     associatedDevices: List<AssociatedDeviceCompat>,
     onDeviceAssociated: (AssociatedDeviceCompat) -> Unit,
     onConnect: (AssociatedDeviceCompat) -> Unit,
+    onDisassociate: (AssociatedDeviceCompat) -> Unit,
     onSettingsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
     onTroubleshootingClick: () -> Unit = {},
@@ -188,7 +189,8 @@ fun DevicesScreen(
 
             AssociatedDevicesList(
                 associatedDevices = associatedDevices,
-                onConnect = onConnect
+                onConnect = onConnect,
+                onDisassociate = onDisassociate,
             )
 
             // Handle pairing for newly associated device

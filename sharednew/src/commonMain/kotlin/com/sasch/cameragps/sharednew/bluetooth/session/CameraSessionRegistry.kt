@@ -13,6 +13,8 @@ data class CameraSession(
     val identifier: String,
     val phase: BleSessionPhase = BleSessionPhase.Connecting,
     val remoteFeatureActive: Boolean = false,
+    /** A shutter sequence is currently running (UI feedback on the shutter button). */
+    val shutterSequenceActive: Boolean = false,
     /** Consecutive auth-error retries (iOS pairing); reset on any success. */
     val pairingRetryCount: Int = 0,
     /** One-shot retry guard for the config read (intermittent GATT 133 on Android). */

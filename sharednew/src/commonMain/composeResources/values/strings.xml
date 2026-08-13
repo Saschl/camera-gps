@@ -258,6 +258,9 @@
     <string name="no_devices_found">No devices found</string>
     <string name="delete_device">Delete Device</string>
     <string name="delete_device_confirmation">Are you sure you want to delete %1$s?</string>
+    <string name="enable_pairing_mode_title">Enable Pairing Mode</string>
+    <string name="enable_pairing_mode_message">If this is the first time connecting this camera to your phone, please make sure to enable Bluetooth pairing mode in your camera's settings before continuing. If this is not the case, simply continue</string>
+    <string name="enable_pairing_mode_continue">Continue</string>
     <string name="delete">Delete</string>
     <string name="always_on_enabled">Always On Enabled</string>
     <!-- Pairing dialog strings -->

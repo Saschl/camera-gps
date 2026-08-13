@@ -28,7 +28,9 @@ kotlin {
     android {
         namespace = "com.sasch.cameragps.sharednew"
         compileSdk {
-            version = release(37)
+            version = release(37) {
+                minorApiLevel = 1
+            }
         }
         minSdk = 26
 
@@ -102,6 +104,7 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 

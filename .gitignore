@@ -49,6 +49,7 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+camerasim/build
 
 # CocoaPods
 #

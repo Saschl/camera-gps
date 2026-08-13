@@ -188,6 +188,9 @@
     <string name="no_devices_found">Keine Geräte gefunden</string>
     <string name="delete_device">Gerät löschen</string>
     <string name="delete_device_confirmation">Möchtest du %1$s wirklich löschen?</string>
+    <string name="enable_pairing_mode_title">Kopplungsmodus aktivieren</string>
+    <string name="enable_pairing_mode_message">Wenn du diese Kamera zum ersten Mal mit deinem Telefon verbindest, aktiviere bitte den Bluetooth-Kopplungsmodus in den Kameraeinstellungen, bevor du fortfaehrst. Wenn das nicht der Fall ist, kannst du einfach fortfahren.</string>
+    <string name="enable_pairing_mode_continue">Weiter</string>
     <string name="delete">Delete</string>
     <string name="always_on_enabled">Immer aktiv (Always On) aktiviert</string>
     <string name="pairing_camera_title">Kopple Kamera</string>

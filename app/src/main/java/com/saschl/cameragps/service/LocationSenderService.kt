@@ -3,34 +3,23 @@ package com.saschl.cameragps.service
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import androidx.annotation.RequiresPermission
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.getSystemService
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.locationTransmissionNotificationId
-import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
-import com.sasch.cameragps.sharednew.bluetooth.session.PairingRetryPolicy
-import com.sasch.cameragps.sharednew.database.LogDatabase
-import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
-import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
+import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.R
 import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
 import com.saschl.cameragps.service.location.AndroidLocationSource
 import com.saschl.cameragps.service.transport.AndroidBleTransport
-import com.saschl.cameragps.utils.PreferencesManager
-import com.saschl.cameragps.utils.SentryInit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -50,48 +39,20 @@ class LocationSenderService : LifecycleService() {
     private val commandMutex = Mutex()
     private val commandRouter = ServiceCommandRouter()
 
-    private val deviceDao: CameraDeviceDAO by lazy {
-        LogDatabase.getRoomDatabase(getDatabaseBuilder(applicationContext)).cameraDeviceDao()
-    }
-
-    private val bluetoothManager: BluetoothManager by lazy {
-        applicationContext.getSystemService()!!
-    }
-
-    private val transport by lazy {
-        AndroidBleTransport(applicationContext, bluetoothManager)
-    }
-
-    private val orchestrator by lazy {
-        CameraSessionOrchestrator(
-            transport = transport,
-            locationSource = AndroidLocationSource(applicationContext),
-            deviceDao = deviceDao,
-            scope = lifecycleScope,
-            // First auth-error retry immediately: on Android the error only means
-            // encryption is still re-establishing, and the retry queues behind it.
-            // A 3s first delay would stall every reconnect handshake.
-            pairingPolicy = PairingRetryPolicy(firstRetryDelayMs = 0),
-        )
-    }
+    // The BLE/location graph is app-scoped (see [AppServices]); the service
+    // borrows it for the duration of a foreground session.
+    private val services get() = AppServices.from(this)
+    private val orchestrator get() = services.orchestrator
+    private val transport get() = services.transport
+    private val bluetoothManager get() = services.bluetoothManager
 
     private val shutdownCoordinator by lazy {
-        ServiceShutdownCoordinator(deviceDao, transport) { startId ->
+        ServiceShutdownCoordinator(services.deviceDao, services.transport) { startId ->
             requestShutdown(startId)
         }
     }
 
     companion object {
-        val activeTransmissions = mutableStateMapOf<String, Boolean>()
-        val remoteFeatureActive = mutableStateMapOf<String, Boolean>()
-        val sessionPhases = mutableStateMapOf<String, BleSessionPhase>()
-
-        /**
-         * Address of the last device whose pairing was rejected by the camera (auth retries
-         * exhausted). The UI shows a troubleshooting dialog while non-null and clears it.
-         */
-        val pairingFailedDevice = mutableStateOf<String?>(null)
-
         @Volatile
         var isRunning: Boolean = false
     }
@@ -107,14 +68,8 @@ class LocationSenderService : LifecycleService() {
 
         if (!startAsForegroundService()) return
 
-        initializeLogging()
-        orchestrator.start()
-
         lifecycleScope.launch {
             orchestrator.events.collect { event -> handleEvent(event) }
-        }
-        lifecycleScope.launch {
-            orchestrator.sessions.collect { sessions -> mirrorToCompanionMaps(sessions) }
         }
     }
 
@@ -127,11 +82,9 @@ class LocationSenderService : LifecycleService() {
         }.onFailure { e ->
             Timber.e(e, "Failed to unregister Bluetooth state receiver")
         }
-        activeTransmissions.clear()
-        remoteFeatureActive.clear()
-        sessionPhases.clear()
         orchestrator.shutdownAll()
         transport.disconnectAll()
+        if (::eventSoundPlayer.isInitialized) eventSoundPlayer.release()
         Timber.i("Destroyed service")
     }
 
@@ -186,16 +139,11 @@ class LocationSenderService : LifecycleService() {
                 // Setup is done — the periodic location writes don't need the
                 // short connection interval requested at connect
                 transport.relaxConnection(event.identifier)
-                // Session state reaches the UI through the sessions mirror; a completed
-                // handshake also invalidates a pending pairing-failure hint for the device.
-                if (pairingFailedDevice.value.equals(event.identifier, ignoreCase = true)) {
-                    pairingFailedDevice.value = null
-                }
             }
 
             is OrchestratorEvent.PairingFailed -> {
+                // Pairing-failure UI state is tracked in AppServices
                 Timber.e("Pairing failed for ${event.identifier}")
-                pairingFailedDevice.value = event.identifier
             }
 
             is OrchestratorEvent.FirstLocationAcquired -> {
@@ -204,27 +152,6 @@ class LocationSenderService : LifecycleService() {
 
             is OrchestratorEvent.LocationUnavailable -> {
                 eventSoundPlayer.play(TransmissionSoundEvent.LOCATION_INVALID)
-            }
-        }
-    }
-
-    /** Diff-apply the shared session registry into the companion maps the Compose UI observes. */
-    private fun mirrorToCompanionMaps(sessions: Map<String, CameraSession>) {
-        (sessionPhases.keys - sessions.keys).forEach { stale ->
-            sessionPhases.remove(stale)
-            activeTransmissions.remove(stale)
-            remoteFeatureActive.remove(stale)
-        }
-        sessions.forEach { (identifier, session) ->
-            if (sessionPhases[identifier] != session.phase) {
-                sessionPhases[identifier] = session.phase
-            }
-            val transmitting = session.phase == BleSessionPhase.Transmitting
-            if (activeTransmissions[identifier] != transmitting) {
-                activeTransmissions[identifier] = transmitting
-            }
-            if (remoteFeatureActive[identifier] != session.remoteFeatureActive) {
-                remoteFeatureActive[identifier] = session.remoteFeatureActive
             }
         }
     }
@@ -356,18 +283,6 @@ class LocationSenderService : LifecycleService() {
             return false
         }
         return true
-    }
-
-    // ==================== Utilities ====================
-
-    private fun initializeLogging() {
-        if (Timber.forest().find { it is FileTree } == null) {
-            FileTree.initialize(this)
-            Timber.plant(FileTree(this, PreferencesManager.logLevel(this)))
-            SentryInit.initSentry(this)
-            val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-            Thread.setDefaultUncaughtExceptionHandler(GlobalExceptionHandler(defaultHandler))
-        }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)

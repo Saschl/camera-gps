@@ -52,4 +52,8 @@ internal class QueuedBleGattPort(
     override fun setRemoteFeatureActive(identifier: String, active: Boolean) {
         registry.updateIfPresent(identifier) { it.copy(remoteFeatureActive = active) }
     }
+
+    override fun setShutterSequenceActive(identifier: String, active: Boolean) {
+        registry.updateIfPresent(identifier) { it.copy(shutterSequenceActive = active) }
+    }
 }

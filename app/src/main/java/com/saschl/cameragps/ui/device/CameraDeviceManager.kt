@@ -58,6 +58,7 @@ import com.google.android.play.core.review.model.ReviewErrorCode
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
+import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.service.BluetoothStateBroadcastReceiver
 import com.saschl.cameragps.service.LocationSenderService
@@ -122,10 +123,10 @@ fun CameraDeviceManager(
 
     var isReviewFlowActive by remember { mutableStateOf(false) }
     var showDonationDialog by remember { mutableStateOf(false) }
-    val pairingFailedAddress by LocationSenderService.pairingFailedDevice
+    val pairingFailedAddress by AppServices.from(context).pairingFailedDevice.collectAsState()
     // Suppresses re-showing the pairing-failure dialog for the same device: the failed
     // camera keeps auto-reconnecting and may exhaust its pairing retries repeatedly.
-    // The service clears pairingFailedDevice on a successful handshake, which re-arms it.
+    // AppServices clears pairingFailedDevice on a successful handshake, which re-arms it.
     var dismissedPairingFailedAddress by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(pairingFailedAddress) {
@@ -248,6 +249,55 @@ fun CameraDeviceManager(
     if (deviceManager == null || adapter == null) {
         Text(text = "No Companion device manager found. The device does not support it.")
     } else {
+        // Shared by the detail screen's Remove button and the list's swipe-to-delete
+        val disassociateDevice: (AssociatedDeviceCompat) -> Unit = { device ->
+            associatedDevices.find { ass -> ass.address == device.address }
+                ?.let { foundDevice ->
+                    Timber.i("Disassociating device: ${foundDevice.name} (${foundDevice.address})")
+                    scope.launch {
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                            deviceManager.stopObservingDevicePresence(
+                                ObservingDevicePresenceRequest.Builder()
+                                    .setAssociationId(foundDevice.id)
+                                    .build()
+                            )
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            @Suppress("DEPRECATION")
+                            deviceManager.stopObservingDevicePresence(
+                                foundDevice.address
+                            )
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            deviceManager.disassociate(foundDevice.id)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            deviceManager.disassociate(foundDevice.address)
+                        }
+
+                        val serviceIntent = Intent(
+                            context.applicationContext,
+                            LocationSenderService::class.java
+                        ).apply {
+                            action =
+                                com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
+                        }
+                        serviceIntent.putExtra(
+                            "address",
+                            foundDevice.address.uppercase()
+                        )
+                        context.startService(serviceIntent)
+
+                        devicesDao.deleteDevice(CameraDevice(foundDevice.address.uppercase()))
+
+                        associatedDevices =
+                            deviceManager.getAssociatedDevices(adapter)
+                    }
+                    selectedDevice = null
+                }
+        }
+
         Box {
             if (selectedDevice == null) {
                 EnhancedLocationPermissionBox {
@@ -279,6 +329,7 @@ fun CameraDeviceManager(
                                 selectedDevice = device
                             }
                         },
+                        onDisassociate = disassociateDevice,
                         onSettingsClick = onSettingsClick,
                         onHelpClick = onHelpClick,
                         onTroubleshootingClick = onTroubleshootingClick,
@@ -294,53 +345,7 @@ fun CameraDeviceManager(
                                 device = selectedDevice!!,
                                 deviceManager = deviceManager,
                                 associationId = it,
-                                onDisassociate = { device ->
-                                    associatedDevices.find { ass -> ass.address == device.address }
-                                        ?.let { foundDevice ->
-                                            Timber.i("Disassociating device: ${foundDevice.name} (${foundDevice.address})")
-                                            scope.launch {
-
-                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-                                                    deviceManager.stopObservingDevicePresence(
-                                                        ObservingDevicePresenceRequest.Builder()
-                                                            .setAssociationId(foundDevice.id)
-                                                            .build()
-                                                    )
-                                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                    @Suppress("DEPRECATION")
-                                                    deviceManager.stopObservingDevicePresence(
-                                                        foundDevice.address
-                                                    )
-                                                }
-
-                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                    deviceManager.disassociate(foundDevice.id)
-                                                } else {
-                                                    @Suppress("DEPRECATION")
-                                                    deviceManager.disassociate(foundDevice.address)
-                                                }
-
-                                                val serviceIntent = Intent(
-                                                    context.applicationContext,
-                                                    LocationSenderService::class.java
-                                                ).apply {
-                                                    action =
-                                                        com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
-                                                }
-                                                serviceIntent.putExtra(
-                                                    "address",
-                                                    foundDevice.address.uppercase()
-                                                )
-                                                context.startService(serviceIntent)
-
-                                                devicesDao.deleteDevice(CameraDevice(foundDevice.address.uppercase()))
-
-                                                associatedDevices =
-                                                    deviceManager.getAssociatedDevices(adapter)
-                                            }
-                                            selectedDevice = null
-                                        }
-                                },
+                        onDisassociate = disassociateDevice,
                                 onClose = { selectedDevice = null },
                                 onHelpClick = onHelpClick
                             )

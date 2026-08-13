@@ -231,6 +231,17 @@ class AndroidBleTransport(
                 if (!gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)) {
                     Timber.w("Could not request high connection priority for %s", address)
                 }
+                // Android 14+ grants 517 to the FIRST client that requests an MTU
+                // and ignores every later request — ask ourselves right away so
+                // another app's value can't win. Fire-and-forget: discovery is not
+                // gated on the exchange (result arrives in onMtuChanged). On API
+                // 37+ the connection settings negotiate the MTU automatically.
+                //  if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.CINNAMON_BUN) {
+                /*    Timber.e("Requesting MTU 23 for %s (API %d)", address, Build.VERSION.SDK_INT)
+                    if (!gatt.requestMtu(153)) {
+                        Timber.w("Could not request MTU for %s", address)
+                    }*/
+                //   }
                 eventChannel.trySend(BleTransportEvent.Connected(address))
                 return
             }

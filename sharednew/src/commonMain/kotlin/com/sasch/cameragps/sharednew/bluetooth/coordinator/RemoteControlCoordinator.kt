@@ -2,21 +2,19 @@ package com.sasch.cameragps.sharednew.bluetooth.coordinator
 
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteControlCoordinator.Companion.SHUTTER_READY_TIMEOUT_MS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -44,10 +42,8 @@ class RemoteControlCoordinator(
     /** Devices with a running command sequence — suppresses the automatic shutter-up. */
     private val sequenceOwners = mutableSetOf<String>()
 
-    private val _events = Channel<BleSessionEvent>(Channel.UNLIMITED)
-
-    /** Collect this flow to receive remote-feature state change events. */
-    val events: Flow<BleSessionEvent> = _events.receiveAsFlow()
+    /** Devices whose sequence is in the trailing ready-wait (buttons already released). */
+    private val readyWaitDevices = mutableSetOf<String>()
 
     /** Every remote-status notification (identifier to raw value), for sequence waits. */
     private val statusUpdates = MutableSharedFlow<Pair<String, ByteArray>>(extraBufferCapacity = 16)
@@ -80,24 +76,15 @@ class RemoteControlCoordinator(
         val normalized = identifier.uppercase()
         statusUpdates.tryEmit(normalized to value)
 
-        val wasActive = port.isRemoteFeatureActive(normalized)
         val active = isRemoteFeatureActive(value)
         port.setRemoteFeatureActive(normalized, active)
 
         if (active) {
             stopProbeLoop(normalized)
-            if (!wasActive) {
-                _events.trySend(BleSessionEvent.RemoteFeatureActivated(normalized))
-            }
+        } else if (normalized in monitoredDevices) {
+            startProbeLoop(normalized)
         } else {
-            if (wasActive) {
-                _events.trySend(BleSessionEvent.RemoteFeatureDeactivated(normalized))
-            }
-            if (normalized in monitoredDevices) {
-                startProbeLoop(normalized)
-            } else {
-                stopProbeLoop(normalized)
-            }
+            stopProbeLoop(normalized)
         }
 
         // A running sequence owns the button state and sends its own releases
@@ -108,22 +95,15 @@ class RemoteControlCoordinator(
 
     /**
      * Called when a write to the remote control characteristic completes.
-     * Emits activation/deactivation events based on success.
+     * Updates the remote-feature state based on success.
      */
     fun onRemoteControlWriteResponse(identifier: String, success: Boolean) {
         val normalized = identifier.uppercase()
-        val wasActive = port.isRemoteFeatureActive(normalized)
         if (success) {
             port.setRemoteFeatureActive(normalized, true)
             stopProbeLoop(normalized)
-            if (!wasActive) {
-                _events.trySend(BleSessionEvent.RemoteFeatureActivated(normalized))
-            }
         } else {
             port.setRemoteFeatureActive(normalized, false)
-            if (wasActive) {
-                _events.trySend(BleSessionEvent.RemoteFeatureDeactivated(normalized))
-            }
         }
     }
 
@@ -163,13 +143,22 @@ class RemoteControlCoordinator(
      * ack-triggered shutter-up is suppressed — the sequence sends its own releases.
      *
      * Returns `true` if the sequence was started; `false` when the device is not
-     * connected, the remote feature is inactive, or a sequence is already running.
+     * connected, the remote feature is inactive, or a sequence is still pressing
+     * buttons. A press during a sequence's trailing ready-wait (buttons already
+     * released) cancels that wait and starts a fresh cycle instead of being
+     * dropped — otherwise a camera that never reports ready would lock the
+     * shutter out for [SHUTTER_READY_TIMEOUT_MS].
      */
     fun startShutterSequence(identifier: String): Boolean {
         val normalized = identifier.uppercase()
-        if (activeSequenceJobs.containsKey(normalized)) return false
         if (!port.isConnected(normalized)) return false
         if (!port.isRemoteFeatureActive(normalized)) return false
+
+        val existing = activeSequenceJobs[normalized]
+        if (existing != null) {
+            if (normalized !in readyWaitDevices) return false
+            existing.cancel()
+        }
 
         // Sequences rely on remote-status notifications. Subscribing is idempotent,
         // and being queued it naturally completes before the sequence's writes.
@@ -178,12 +167,17 @@ class RemoteControlCoordinator(
         sequenceOwners.add(normalized)
         val job = scope.launch(start = CoroutineStart.LAZY) { runShutterCycle(normalized) }
         job.invokeOnCompletion {
-            sequenceOwners.remove(normalized)
+            // Identity check: a replacement sequence may already own this device
             if (activeSequenceJobs[normalized] === job) {
                 activeSequenceJobs.remove(normalized)
+                sequenceOwners.remove(normalized)
             }
+            // Report the map's state, not "false": on a takeover the replacement
+            // sequence is still running when the cancelled job completes
+            port.setShutterSequenceActive(normalized, activeSequenceJobs.containsKey(normalized))
         }
         activeSequenceJobs[normalized] = job
+        port.setShutterSequenceActive(normalized, true)
         job.start()
         return true
     }
@@ -219,15 +213,20 @@ class RemoteControlCoordinator(
                 ) {
                     isShutterActive(it)
                 }
-            if (fullPress == StepResult.TimedOut) {
-                log.w { "Camera $identifier did not report the shutter active" }
-            }
-            if (fullPress != StepResult.NotSent) {
+            if (fullPress == StepResult.Confirmed) {
                 // Subscribe to the ready status before releasing, so a fast exposure
                 // finishing right after the release is not missed
                 readyWaiter = async(start = CoroutineStart.UNDISPATCHED) {
                     awaitStatus(identifier, SHUTTER_READY_TIMEOUT_MS) { isCameraReady(it) }
                 }
+            } else if (fullPress == StepResult.TimedOut) {
+                // No shutter-active status means the exposure never started (e.g.
+                // release priority refused without focus lock). The camera never
+                // left the ready state and only notifies on changes, so waiting
+                // for ready would always run out the full timeout — skip it.
+                log.w { "Camera $identifier did not report the shutter active, skipping the ready wait" }
+            }
+            if (fullPress != StepResult.NotSent) {
                 sendCommand(identifier, RemoteCommand.ShutterFullRelease)
             }
         } finally {
@@ -235,9 +234,17 @@ class RemoteControlCoordinator(
             sendCommand(identifier, RemoteCommand.ShutterHalfRelease)
         }
 
-        // Wait until the exposure finished and the camera is ready again
-        if (readyWaiter != null && readyWaiter.await() == null) {
-            log.w { "Camera $identifier did not report ready after the shutter cycle" }
+        // Wait until the exposure finished and the camera is ready again. A new
+        // shutter press may cancel this wait (see startShutterSequence).
+        if (readyWaiter != null) {
+            readyWaitDevices.add(identifier)
+            try {
+                if (readyWaiter.await() == null) {
+                    log.w { "Camera $identifier did not report ready after the shutter cycle" }
+                }
+            } finally {
+                readyWaitDevices.remove(identifier)
+            }
         }
     }
 
@@ -307,6 +314,7 @@ class RemoteControlCoordinator(
         activeProbeJobs.remove(normalized)?.cancel()
         activeSequenceJobs.remove(normalized)?.cancel()
         sequenceOwners.remove(normalized)
+        readyWaitDevices.remove(normalized)
     }
 
     /**
@@ -316,9 +324,11 @@ class RemoteControlCoordinator(
         monitoredDevices.clear()
         activeProbeJobs.values.forEach { it.cancel() }
         activeProbeJobs.clear()
-        activeSequenceJobs.values.forEach { it.cancel() }
+        // Snapshot: completion handlers may remove their own entry synchronously
+        activeSequenceJobs.values.toList().forEach { it.cancel() }
         activeSequenceJobs.clear()
         sequenceOwners.clear()
+        readyWaitDevices.clear()
     }
 
     // ---- Internal probe loop ----

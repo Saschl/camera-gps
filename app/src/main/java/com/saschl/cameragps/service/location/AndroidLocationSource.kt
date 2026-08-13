@@ -82,6 +82,9 @@ class AndroidLocationSource(
             locationListener = null
         }
         started = false
+        // App-scoped instance: re-read the provider preference on the next
+        // start, so a LocationProviderCard change applies without process death
+        initialized = false
     }
 
     override fun hasPreciseAuthorization(): Boolean = true

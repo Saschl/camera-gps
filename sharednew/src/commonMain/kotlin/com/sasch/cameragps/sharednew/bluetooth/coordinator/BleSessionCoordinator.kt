@@ -48,7 +48,7 @@ class BleSessionCoordinator(
     fun beginHandshake(identifier: String) {
         val id = identifier.uppercase()
         port.setRemoteFeatureActive(id, false)
-        emitPhase(id, BleSessionPhase.DiscoveringServices, remoteActive = false)
+        emitPhase(id, BleSessionPhase.DiscoveringServices)
 
         if (port.hasCharacteristic(id, SonyBluetoothConstants.CHARACTERISTIC_READ_UUID)) {
             log.d { "Handshake[$id]: requesting config read" }
@@ -235,12 +235,8 @@ class BleSessionCoordinator(
 
     }
 
-    private fun emitPhase(
-        identifier: String,
-        phase: BleSessionPhase,
-        remoteActive: Boolean? = null,
-    ) {
-        _events.trySend(BleSessionEvent.PhaseChanged(identifier, phase, remoteActive))
+    private fun emitPhase(identifier: String, phase: BleSessionPhase) {
+        _events.trySend(BleSessionEvent.PhaseChanged(identifier, phase))
     }
 }
 
