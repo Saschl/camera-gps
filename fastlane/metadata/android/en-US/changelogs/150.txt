@@ -1,0 +1,9 @@
+Initial release on F-Droid! 🎉
+
+Alpha GPS geotags your photos by sending your phone's GPS to Sony Alpha cameras over Bluetooth LE, and doubles as a remote shutter. This build is fully FOSS: no Google Play Services, no tracking.
+
+Also new in v1.5.0:
+- Remote shutter: full capture sequence (focus, shoot, release) driven by camera status
+- Prompt to put the camera into pairing mode when needed
+- Vietnamese translation
+- Bug fixes and dependency updates
