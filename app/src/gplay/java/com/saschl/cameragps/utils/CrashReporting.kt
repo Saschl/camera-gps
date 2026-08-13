@@ -7,9 +7,17 @@ import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.timber.SentryTimberIntegration
 
-object SentryInit {
+/**
+ * gplay crash reporting: Sentry. Only ever initialized after the user consented
+ * (see SentryConsentDialog / CameraGpsApplication). The foss flavor ships a
+ * no-op counterpart of this object.
+ */
+object CrashReporting {
 
-    fun initSentry(context: Context) {
+    /** Gates the consent dialog and the Sentry settings entry. */
+    const val AVAILABLE = true
+
+    fun init(context: Context) {
         SentryAndroid.init(context) { options ->
             options.isSendDefaultPii = false
             val macRegex = Regex("([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})")
@@ -30,5 +38,4 @@ object SentryInit {
             }
         }
     }
-
 }

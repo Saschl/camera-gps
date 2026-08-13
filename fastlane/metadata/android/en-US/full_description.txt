@@ -1,0 +1,15 @@
+Alpha GPS geotags your photos by transmitting your phone's GPS location to Sony Alpha cameras over Bluetooth LE — a lightweight alternative to the official apps. It also offers a Bluetooth remote shutter.
+
+<b>Features</b>
+
+<ul>
+<li>Continuous location transmission to the camera while shooting, including automatic time synchronization</li>
+<li>Automatic reconnection when the camera is turned on, even with the app in the background and the screen off (via Android's companion device manager)</li>
+<li>Remote shutter with a focus → shutter sequence</li>
+<li>Optional "Always On" foreground service for devices with aggressive battery management</li>
+<li>Multiple cameras can be paired</li>
+<li>No account, no ads, no tracking</li>
+</ul>
+
+Works with Sony cameras that support location linking via Bluetooth (as used by Imaging Edge Mobile or Creators' App).
+

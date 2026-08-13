@@ -16,6 +16,7 @@ material = "1.14.0"
 navigationeventVersion = "1.1.2"
 review = "2.0.2"
 reviewKtx = "2.0.2"
+sentry = "8.53.0"
 room = "2.8.4"
 runtimeLivedata = "1.11.4"
 coreSplashscreen = "1.2.0"
@@ -65,6 +66,8 @@ material = { module = "com.google.android.material:material", version.ref = "mat
 navigationevent = { module = "androidx.navigationevent:navigationevent", version.ref = "navigationeventVersion" }
 review = { module = "com.google.android.play:review", version.ref = "review" }
 review-ktx = { module = "com.google.android.play:review-ktx", version.ref = "reviewKtx" }
+sentry-android = { module = "io.sentry:sentry-android", version.ref = "sentry" }
+sentry-android-timber = { module = "io.sentry:sentry-android-timber", version.ref = "sentry" }
 timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" }
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
 google-play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "googlePlayServicesLocation" }

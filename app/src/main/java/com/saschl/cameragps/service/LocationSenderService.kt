@@ -18,7 +18,6 @@ import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.R
 import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
-import com.saschl.cameragps.service.location.AndroidLocationSource
 import com.saschl.cameragps.service.transport.AndroidBleTransport
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -29,7 +28,8 @@ import timber.log.Timber
  * Thin Android lifecycle shell. Owns the foreground service, notifications,
  * sounds, intent routing and stopSelf(). All BLE/location/session logic lives
  * in the shared [CameraSessionOrchestrator]; the raw GATT/location plumbing in
- * [AndroidBleTransport] and [AndroidLocationSource].
+ * [AndroidBleTransport] and the flavor-provided
+ * [com.sasch.cameragps.sharednew.bluetooth.location.LocationSource].
  */
 class LocationSenderService : LifecycleService() {
 

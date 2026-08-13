@@ -18,8 +18,8 @@ import cameragps.sharednew.generated.resources.sentry_consent_decline
 import cameragps.sharednew.generated.resources.sentry_consent_dont_show
 import cameragps.sharednew.generated.resources.sentry_consent_message
 import cameragps.sharednew.generated.resources.sentry_consent_title
+import com.saschl.cameragps.utils.CrashReporting
 import com.saschl.cameragps.utils.PreferencesManager
-import com.saschl.cameragps.utils.SentryInit
 import org.jetbrains.compose.resources.stringResource
 import timber.log.Timber
 
@@ -53,7 +53,7 @@ fun SentryConsentDialog(
                     onClick = {
                         PreferencesManager.setSentryEnabled(context, true)
                         PreferencesManager.setSentryConsentDialogDismissed(context, true)
-                        SentryInit.initSentry(context)
+                        CrashReporting.init(context)
                         Timber.i("User accepted Sentry error reporting, initializing Sentry")
                         onDismiss()
                     },

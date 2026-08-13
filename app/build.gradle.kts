@@ -37,11 +37,16 @@ android {
         applicationId = "com.saschl.cameragps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 141
-        versionName = "v1.4.1"
+        versionCode = 150
+        versionName = "v1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // F-Droid builds from source without the keystore or signing secrets — release
+    // must fall back to an unsigned APK instead of failing.
+    val releaseSigningAvailable =
+        file("keystore.jks").exists() && System.getenv("SIGNING_KEY_ALIAS") != null
 
     signingConfigs {
         create("release") {
@@ -60,9 +65,30 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig =
+                if (releaseSigningAvailable) signingConfigs.getByName("release") else null
 
         }
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        // Play Store build: GMS fused location, Play in-app review, Sentry.
+        create("gplay") {
+            dimension = "distribution"
+            isDefault = true
+        }
+        // F-Droid build: no GMS, no Play libraries, no Sentry.
+        create("foss") {
+            dimension = "distribution"
+        }
+    }
+
+    dependenciesInfo {
+        // The dependency-info block is an encrypted blob only Google Play can read;
+        // F-Droid rejects APKs that contain it.
+        includeInApk = false
+        includeInBundle = true
     }
 
     compileOptions {
@@ -106,11 +132,14 @@ dependencies {
     implementation(libs.timber)
     //implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.core.splashscreen)
-    implementation(libs.google.play.services.location)
     implementation(libs.accompanist.permissions)
 
-    implementation(libs.review)
-    implementation(libs.review.ktx)
+    // Proprietary bits stay out of the foss (F-Droid) flavor.
+    "gplayImplementation"(libs.google.play.services.location)
+    "gplayImplementation"(libs.review)
+    "gplayImplementation"(libs.review.ktx)
+    "gplayImplementation"(libs.sentry.android)
+    "gplayImplementation"(libs.sentry.android.timber)
 
     implementation(libs.material)
 
@@ -146,4 +175,11 @@ sentry {
     // this will upload your source code to Sentry to show it as part of the stack traces
     // disable if you don't want to expose your sources
     includeSourceContext.set(true)
+
+    // The foss flavor ships without Sentry; the SDK is added explicitly via
+    // gplayImplementation instead of auto-installation (which is variant-blind).
+    ignoredFlavors.set(setOf("foss"))
+    autoInstallation {
+        enabled.set(false)
+    }
 }

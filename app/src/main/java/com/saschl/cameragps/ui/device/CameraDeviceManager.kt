@@ -52,9 +52,6 @@ import cameragps.sharednew.generated.resources.pairing_failed_hint_intro
 import cameragps.sharednew.generated.resources.pairing_failed_hint_pairing_mode
 import cameragps.sharednew.generated.resources.pairing_failed_hint_phone_pairing
 import cameragps.sharednew.generated.resources.pairing_failed_title
-import com.google.android.play.core.review.ReviewException
-import com.google.android.play.core.review.ReviewManagerFactory
-import com.google.android.play.core.review.model.ReviewErrorCode
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
@@ -65,6 +62,7 @@ import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.service.getAssociatedDevices
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
+import com.saschl.cameragps.ui.review.launchInAppReviewIfDue
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -92,8 +90,6 @@ fun CameraDeviceManager(
     var selectedDevice by remember {
         mutableStateOf<AssociatedDeviceCompat?>(null)
     }
-
-    val manager = ReviewManagerFactory.create(context)
 
     val activity = LocalActivity.current
 
@@ -149,40 +145,11 @@ fun CameraDeviceManager(
         }
     }
 
-    // TODO refactor out of composable
     LaunchedEffect(lifecycleState) {
         if (SCREENSHOT_MODE) return@LaunchedEffect
-        if (associatedDevices.isNotEmpty() && PreferencesManager.reviewHintLastShownDaysAgo(
-                context.applicationContext,
-                true
-            ) >= 30
-            && lifecycleState == Lifecycle.State.RESUMED && PreferencesManager.reviewHintShownTimes(
-                context.applicationContext
-            ) < 3
-        ) {
-            val request = manager.requestReviewFlow()
-            PreferencesManager.setReviewHintShownNow(context.applicationContext)
-            PreferencesManager.increaseReviewHintShownTimes(context.applicationContext)
-
-            request.addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    isReviewFlowActive = true
-                    // We got the ReviewInfo object
-                    val reviewInfo = task.result
-                    val flow = manager.launchReviewFlow(activity!!, reviewInfo)
-                    flow.addOnCompleteListener { _ ->
-                        Timber.i("Review done!")
-                        isReviewFlowActive = false
-                    }
-                } else {
-                    // There was some problem, log or handle the error code.
-                    @ReviewErrorCode val reviewErrorCode =
-                        (task.exception as ReviewException).errorCode
-                    Timber.e("Review flow failed with error code: $reviewErrorCode")
-                    PreferencesManager.resetReviewHintShown(context.applicationContext)
-                    PreferencesManager.decreaseReviewHintShownTimes(context.applicationContext)
-                }
-            }
+        if (associatedDevices.isNotEmpty() && lifecycleState == Lifecycle.State.RESUMED) {
+            // Due-date/count checks live in the flavor hook; no-op in foss.
+            launchInAppReviewIfDue(context, activity) { isReviewFlowActive = it }
         }
     }
 

@@ -39,6 +39,7 @@ import com.saschl.cameragps.ui.WelcomeScreen
 import com.saschl.cameragps.ui.device.CameraDeviceManager
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
 import com.saschl.cameragps.ui.settings.SettingsScreen
+import com.saschl.cameragps.utils.CrashReporting
 import com.saschl.cameragps.utils.PreferencesManager
 import com.saschl.cameragps.utils.logging.AndroidLogFormatter
 import kotlinx.serialization.Serializable
@@ -140,7 +141,8 @@ class MainActivity : AppCompatActivity() {
 
         var showSentryDialog by remember {
             mutableStateOf(
-                !SCREENSHOT_MODE && !PreferencesManager.isSentryConsentDialogDismissed(context)
+                CrashReporting.AVAILABLE && !SCREENSHOT_MODE &&
+                        !PreferencesManager.isSentryConsentDialogDismissed(context)
             )
         }
         var forceDonationDialogThisLaunch by remember {
@@ -204,9 +206,8 @@ class MainActivity : AppCompatActivity() {
                 AppDestination.Devices -> {
                     NavEntry(AppDestination.Devices) {
                         LaunchedEffect(Unit) {
-                            showSentryDialog = !SCREENSHOT_MODE &&
+                            showSentryDialog = CrashReporting.AVAILABLE && !SCREENSHOT_MODE &&
                                     !PreferencesManager.isSentryConsentDialogDismissed(context)
-                                !PreferencesManager.isSentryConsentDialogDismissed(context)
                         }
 
 

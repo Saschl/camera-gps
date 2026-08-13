@@ -40,7 +40,9 @@ import cameragps.sharednew.generated.resources.sentry_settings
 import cameragps.sharednew.generated.resources.settings
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import com.saschl.cameragps.R
+import com.saschl.cameragps.service.location.LOCATION_PROVIDER_SELECTABLE
 import com.saschl.cameragps.ui.ReviewHintDebugPanel
+import com.saschl.cameragps.utils.CrashReporting
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
@@ -147,12 +149,14 @@ private fun SettingsOverviewScreen(
             item {
                 LogLevelSettingsCard()
             }
-            item {
-                SettingsSectionNavigation(
-                    title = stringResource(Res.string.location_provider_title),
-                    description = stringResource(Res.string.location_provider_hint),
-                    onClick = { onOpenDestination(SettingsDestination.LocationProvider) }
-                )
+            if (LOCATION_PROVIDER_SELECTABLE) {
+                item {
+                    SettingsSectionNavigation(
+                        title = stringResource(Res.string.location_provider_title),
+                        description = stringResource(Res.string.location_provider_hint),
+                        onClick = { onOpenDestination(SettingsDestination.LocationProvider) }
+                    )
+                }
             }
             item {
                 SettingsSectionNavigation(
@@ -170,12 +174,14 @@ private fun SettingsOverviewScreen(
             item {
                 LanguageSettingsCard()
             }
-            item {
-                SettingsSectionNavigation(
-                    title = stringResource(Res.string.sentry_settings),
-                    description = stringResource(Res.string.enable_sentry_description),
-                    onClick = { onOpenDestination(SettingsDestination.Sentry) }
-                )
+            if (CrashReporting.AVAILABLE) {
+                item {
+                    SettingsSectionNavigation(
+                        title = stringResource(Res.string.sentry_settings),
+                        description = stringResource(Res.string.enable_sentry_description),
+                        onClick = { onOpenDestination(SettingsDestination.Sentry) }
+                    )
+                }
             }
 
             if (debugPanelCounter >= 5) {
