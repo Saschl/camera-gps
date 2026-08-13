@@ -26,4 +26,4 @@ rootProject.name = "CameraGps"
 include(":app")
 include(":sharednew")
 // Standalone test tool: a phone that pretends to be a Sony camera (see camerasim/README.md)
-include(":camerasim")
+//include(":camerasim")
