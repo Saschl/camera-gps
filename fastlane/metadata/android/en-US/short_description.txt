@@ -1,1 +1,1 @@
-Transmit your phone's GPS location to Sony cameras over Bluetooth LE for automatic Geotagging
+Transmit your phone's location to Sony cameras over Bluetooth for geotagging
