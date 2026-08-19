@@ -227,4 +227,18 @@
     <string name="start">开始</string>
     <string name="transmission_active">传输中</string>
     <string name="transmission_inactive">传输停止</string>
+    <string name="guide_title">故障排除指南</string>
+    <string name="guide_intro">点击这里查看最常见问题的逐步解决方法。</string>
+    <string name="guide_open_button">打开故障排除指南</string>
+    <string name="guide_location_link_title">启用位置和时区关联（旧款相机）</string>
+    <string name="guide_location_link_description">在使用较旧菜单布局的相机（例如 α6400、ZV-E10、α6100、α7 III）时，必须手动开启位置链接功能。较新的相机在应用程序连接时会自动激活该功能。</string>
+    <string name="guide_location_link_step_enable">在相机上，打开位置关联：</string>
+    <string name="guide_location_link_step_enable_path">菜单 → 网络 → 本地信息链接设置 → 位置信息链接 → 开启</string>
+    <string name="guide_location_link_step_time">要同时从手机获取时间和时区，请在同一菜单中启用这两个选项：</string>
+    <string name="guide_location_link_step_time_path">自动时间校正 → 开 • 自动区域调整 → 开</string>
+    <string name="guide_location_link_step_remote_note">如果菜单项是灰色的或连接仍然失败，请关闭蓝牙遥控器——参见第3节。</string>
+    <string name="guide_link_location_a6400">索尼帮助指南：位置信息链接设置（α6400）</string>
+    <string name="guide_link_location_zve10">索尼帮助指南：位置信息。链接设置。（ZV-E10）</string>
+    <string name="guide_repair_title">摄像头可以连接，但 GPS 无法工作</string>
+    <string name="guide_repair_description">典型情况是之前用索尼的 Creators' App 或 Imaging Edge Mobile 设置相机时：手机已经与相机配对，因此不会请求新的配对——但 Alpha GPS 的位置传输无法正常工作。在所有地方移除旧配对可以解决这个问题。</string>
 </resources>
