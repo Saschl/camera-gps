@@ -1,3 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="foreground_service_notification">Se transmite locația la camerele %1$d</string>
+    <string name="app_standby_title">Repaus</string>
+    <string name="app_standby_content">Se așteaptă conectarea camerei</string>
+    <string name="notification_channel_name">Statut transmisiune</string>
+    <string name="disconnect_notification_channel_name">Dispozitiv deconectat</string>
 </resources>
