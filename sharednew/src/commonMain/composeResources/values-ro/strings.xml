@@ -1,3 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="foreground_service_notification">Se transmite locația la camerele %1$d</string>
+    <string name="app_standby_title">Repaus</string>
+    <string name="app_standby_content">Se așteaptă conectarea camerei</string>
+    <string name="notification_channel_name">Statut transmisiune</string>
+    <string name="disconnect_notification_channel_name">Dispozitiv deconectat</string>
+    <string name="header_device_list">Camerele mele</string>
+    <string name="scan_for_devices">Apasă pentru a găsi &amp; asocia camera ta</string>
+    <string name="permission_gps">Accesează locația precisă</string>
+    <string name="permission_background_gps">Acceptă accesul la locație când aplicația este în fundal</string>
+    <string name="permission_bluetooth">Acceptă ca aplicația să stabilească conexiuni bluetooth</string>
+    <string name="permission_notifications">Lasă aplicația să posteze notificări</string>
+    <string name="step1_title">Pasul 1: Acces la Locație și la Bluetooth</string>
+    <string name="step1_desc">Necesar pentru a te conecta la camera Sony și să accesezi datele despre locație.</string>
+    <string name="step1_missing">Permisiuni refuzate:</string>
 </resources>
