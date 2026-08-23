@@ -1,23 +1,11 @@
 package com.sasch.cameragps.sharednew.language
 
+/**
+ * A selectable app language. The list of instances (SupportedLanguages) is
+ * generated at build time from the composeResources locale folders — see the
+ * :sharednew:generateSupportedLanguages task.
+ */
 data class AppLanguage(
     val tag: String,
     val displayName: String,
 )
-
-object SupportedLanguages {
-    val entries: List<AppLanguage> = listOf(
-        AppLanguage(tag = "en", displayName = "English"),
-        AppLanguage(tag = "de", displayName = "Deutsch"),
-        AppLanguage(tag = "zh-Hans", displayName = "中文"),
-        AppLanguage(tag = "es", displayName = "Español"),
-        AppLanguage(tag = "ja", displayName = "日本語"),
-        AppLanguage(tag = "id", displayName = "Indonesia"),
-    )
-
-    fun fromTag(tag: String): AppLanguage? {
-        val normalized = tag.substringBefore('-').lowercase()
-        return entries.firstOrNull { it.tag.substringBefore('-').lowercase() == normalized }
-    }
-}
-
