@@ -218,7 +218,6 @@
     <string name="back">Back</string>
     <string name="device_icon">Device icon</string>
     <string name="trigger_shutter">Trigger remote shutter</string>
-    <string name="remote_feature_active">Connected. Remote ready, tap camera icon to take a picture</string>
     <string name="remote_feature_inactive">Connected. Remote off in camera or app</string>
     <string name="show_details">Show details</string>
     <string name="device_name_with_address">Name: %1$s (%2$s)</string>

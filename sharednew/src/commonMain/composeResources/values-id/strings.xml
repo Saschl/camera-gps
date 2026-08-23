@@ -269,7 +269,6 @@
     <string name="scan_timeout_creators_app_hint">Kamera tidak ditemukan? Pastikan kamera berada dalam mode pairing. Jika sebelumnya disiapkan dengan Creators' App atau Imaging Edge Mobile Sony, hapus pairing lama dari kamera dan dari pengaturan Bluetooth ponsel Anda — panduan pemecahan masalah akan memandu Anda langkah demi langkah.</string>
     <string name="remote_control_hint">Pada beberapa model kamera, kontrol jarak jauh tidak dapat digunakan saat pengaitan lokasi aktif. Jika koneksi atau transfer GPS berhenti berfungsi, nonaktifkan fitur ini.</string>
     <string name="trigger_shutter">Picu rana jarak jauh</string>
-    <string name="remote_feature_active">Tersambung. Remote siap, ketuk ikon kamera untuk mengambil foto</string>
     <string name="remote_feature_inactive">Tersambung. Remote nonaktif di kamera atau app</string>
     <string name="enable_remote_control">Aktifkan kontrol jarak jauh</string>
 </resources>

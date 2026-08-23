@@ -158,7 +158,6 @@
     <string name="back">பின்</string>
     <string name="device_icon">சாதன படவுரு</string>
     <string name="trigger_shutter">ரிமோட் சட்டரைத் தூண்டவும்</string>
-    <string name="remote_feature_active">இணைக்கப்பட்டது. ரிமோட் ஆயத்தம், படம் எடுக்க கேமரா ஐகானைத் தட்டவும்</string>
     <string name="remote_feature_inactive">இணைக்கப்பட்டது. கேமரா அல்லது ஆப்சில் ரிமோட் ஆஃப்</string>
     <string name="show_details">விவரங்களைக் காட்டு</string>
     <string name="device_name_with_address">பெயர்: %1$s (%2$s)</string>

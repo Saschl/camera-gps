@@ -34,6 +34,7 @@ import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
+import com.saschl.cameragps.ui.device.mockDeviceListItems
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -51,7 +52,8 @@ fun AssociatedDevicesList(
     val viewModel: DeviceListViewModel = viewModel {
         DeviceListViewModel(AndroidDeviceListDataSource(AppServices.from(context)))
     }
-    val items by viewModel.items.collectAsState()
+    val realItems by viewModel.items.collectAsState()
+    val items = if (SCREENSHOT_MODE) mockDeviceListItems else realItems
 
     if (associatedDevices.isEmpty()) {
         EmptyDevicesCard()

@@ -240,7 +240,6 @@
     <string name="donation_dialog_message">Si la aplicación le ayuda en su fotografía, una pequeña donación ayuda a continuar con el desarrollo. Esto es completamente opcional.</string>
     <string name="donation_dialog_confirm">Apoyar proyecto</string>
     <string name="trigger_shutter">Disparador remoto</string>
-    <string name="remote_feature_active">Conectado. Control remoto listo, toque el icono de la cámara para tomar una foto</string>
     <string name="remote_feature_inactive">Conectado. Desactivado de forma remota desde la cámara o la aplicación</string>
     <string name="enable_remote_control">Habilitar control remoto</string>
     <string name="guide_title">Guía de Solución de Problemas</string>

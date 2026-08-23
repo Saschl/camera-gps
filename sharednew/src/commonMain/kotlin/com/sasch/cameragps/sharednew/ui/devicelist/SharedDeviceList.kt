@@ -6,16 +6,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +58,6 @@ import cameragps.sharednew.generated.resources.enable_pairing_mode_title
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.nearby_cameras
 import cameragps.sharednew.generated.resources.not_paired_tap_to_pair_again
-import cameragps.sharednew.generated.resources.remote_feature_active
 import cameragps.sharednew.generated.resources.remote_feature_inactive
 import cameragps.sharednew.generated.resources.saved_devices
 import cameragps.sharednew.generated.resources.show_details
@@ -363,18 +368,6 @@ private fun DeviceCard(
                             contentDescription = transmissionStatusDescription
                         }
                     )
-                    if (device.isSaved) {
-                        IconButton(
-                            enabled = isRemoteFeatureActive,
-                            onClick = onTriggerRemoteShutter,
-                        ) {
-                            ShutterPulseIcon(
-                                isActive = isShutterActive,
-                                painter = painterResource(Res.drawable.camera_24px),
-                                contentDescription = stringResource(Res.string.trigger_shutter),
-                            )
-                        }
-                    }
                     IconButton(
                         onClick = onOpenDetails,
                     ) {
@@ -400,13 +393,11 @@ private fun DeviceCard(
                 )
             }
             val statusText = when {
-                device.isConnected ->
-                    stringResource(Res.string.connected) + " - " +
-                            if (isRemoteFeatureActive) {
-                                stringResource(Res.string.remote_feature_active)
-                            } else {
-                                stringResource(Res.string.remote_feature_inactive)
-                            }
+                // Remote-active needs no extra text: the shutter button says it all.
+                device.isConnected && isRemoteFeatureActive ->
+                    stringResource(Res.string.connected)
+
+                device.isConnected -> stringResource(Res.string.remote_feature_inactive)
 
                 !device.isSaved -> stringResource(Res.string.tap_to_connect)
 
@@ -423,6 +414,27 @@ private fun DeviceCard(
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
+            }
+            if (device.isSaved && isRemoteFeatureActive) {
+                val haptics = LocalHapticFeedback.current
+                FilledTonalButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        onTriggerRemoteShutter()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .heightIn(min = 52.dp),
+                ) {
+                    ShutterPulseIcon(
+                        isActive = isShutterActive,
+                        painter = painterResource(Res.drawable.camera_24px),
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(Res.string.trigger_shutter))
+                }
             }
         }
     }

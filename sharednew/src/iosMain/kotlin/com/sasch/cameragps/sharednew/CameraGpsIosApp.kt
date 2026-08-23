@@ -93,7 +93,8 @@ internal fun CameraGpsIosApp() {
     val listViewModel: DeviceListViewModel = viewModel {
         DeviceListViewModel(IosDeviceListDataSource)
     }
-    val listItems by listViewModel.items.collectAsState()
+    val realListItems by listViewModel.items.collectAsState()
+    val listItems = if (SCREENSHOT_MODE) mockDeviceListItems else realListItems
     val scope = rememberCoroutineScope()
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val logRepository = remember { LogRepository(getDatabaseBuilder()) }

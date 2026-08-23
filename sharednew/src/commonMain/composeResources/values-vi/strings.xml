@@ -203,7 +203,6 @@
     <string name="back">Quay lại</string>
     <string name="device_icon">Thiết bị biểu tượng</string>
     <string name="trigger_shutter">Trigger remote shutter</string>
-    <string name="remote_feature_active">Connected. Remote ready, tap máy ảnh biểu tượng to take a picture</string>
     <string name="remote_feature_inactive">Connected. Remote off in máy ảnh or app</string>
     <string name="show_details">Hiện details</string>
     <string name="device_name_with_address">Name: %1$s (%2$s)</string>

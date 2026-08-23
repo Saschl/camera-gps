@@ -1,6 +1,7 @@
 package com.sasch.cameragps.sharednew
 
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
+import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
 
 /**
  * Toggle this flag to true before taking App Store screenshots,
@@ -35,6 +36,21 @@ internal val mockDevices = listOf(
         name = "ILCE-9M3",
         isConnected = false,
         isSaved = false,
+    ),
+)
+
+/**
+ * Per-row state for the mock devices: the connected camera is fully active
+ * (transmitting + remote feature on) so screenshots show the green status
+ * and the large shutter button. Devices without an entry render all-off.
+ */
+internal val mockDeviceListItems = mapOf(
+    "ILCE-7M4" to DeviceListItem(
+        identifier = "ILCE-7M4",
+        isAlwaysOnEnabled = false,
+        isTransmissionActive = true,
+        isRemoteFeatureActive = true,
+        isShutterActive = false,
     ),
 )
 

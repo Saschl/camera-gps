@@ -1,5 +1,6 @@
 package com.saschl.cameragps.ui.device
 
+import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 
 /**
@@ -36,6 +37,21 @@ internal val mockDevices = listOf(
         name = "ILCE-9M3",
         device = null,
         isPaired = true,
+    ),
+)
+
+/**
+ * Per-row state for the mock devices: the first camera is fully active
+ * (transmitting + remote feature on) so screenshots show the green status
+ * and the large shutter button. Devices without an entry render all-off.
+ */
+internal val mockDeviceListItems = mapOf(
+    "AA:BB:CC:DD:EE:01" to DeviceListItem(
+        identifier = "AA:BB:CC:DD:EE:01",
+        isAlwaysOnEnabled = true,
+        isTransmissionActive = true,
+        isRemoteFeatureActive = true,
+        isShutterActive = true,
     ),
 )
 

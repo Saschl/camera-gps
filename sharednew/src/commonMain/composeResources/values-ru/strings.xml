@@ -199,7 +199,6 @@
     <string name="back">Назад</string>
     <string name="device_icon">Иконка устройства</string>
     <string name="trigger_shutter">Дистанционный спуск затвора</string>
-    <string name="remote_feature_active">Подключено. Дистанционный спуск готов, нажмите на иконку камеры для снимка</string>
     <string name="remote_feature_inactive">Подключено. Дистанционный спуск отключен на камере или в приложении</string>
     <string name="show_details">Показать детали</string>
     <string name="device_name_with_address">Имя: %1$s (%2$s)</string>
