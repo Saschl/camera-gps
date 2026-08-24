@@ -1,6 +1,7 @@
 package com.saschl.cameragps.utils
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -20,14 +21,14 @@ import java.util.concurrent.Executor
 object DeviceAssociationUtils {
 
     @SuppressLint("MissingPermission")
-    fun getAssociationResult(intent: Intent): AssociatedDeviceCompat? {
+    fun getAssociationResult(intent: Intent, adapter: BluetoothAdapter?): AssociatedDeviceCompat? {
         var result: AssociatedDeviceCompat? = null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             result = intent.getParcelableExtra(
                 CompanionDeviceManager.EXTRA_ASSOCIATION,
                 AssociationInfo::class.java,
-            )?.toAssociatedDevice()
+            )?.toAssociatedDevice(adapter)
         } else {
             // Below Android 33 the result returns either a BLE ScanResult, a
             // Classic BluetoothDevice or a Wifi ScanResult

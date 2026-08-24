@@ -26,7 +26,7 @@ internal fun CompanionDeviceManager.getAssociatedDevices(adapter: BluetoothAdapt
     val isBluetoothOn = adapter.isEnabled
     val associatedDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         myAssociations.map {
-            it.toAssociatedDevice().apply {
+            it.toAssociatedDevice(adapter).apply {
                 // Check if device is Bluetooth paired
                 isPaired = if (isBluetoothOn) {
                     adapter.bondedDevices.any { bondedDevice ->
@@ -61,14 +61,22 @@ internal fun CompanionDeviceManager.getAssociatedDevices(adapter: BluetoothAdapt
 }
 
 
+@SuppressLint("MissingPermission")
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-internal fun AssociationInfo.toAssociatedDevice() = AssociatedDeviceCompat(
-    id = id,
-    address = deviceMacAddress?.toString().let { it?.uppercase(Locale.getDefault()) } ?: "N/A",
-    name = displayName?.ifBlank { "N/A" }?.toString() ?: "N/A",
-    device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        associatedDevice?.bleDevice?.device
-    } else {
-        null
-    },
-)
+internal fun AssociationInfo.toAssociatedDevice(adapter: BluetoothAdapter?): AssociatedDeviceCompat {
+    val address = deviceMacAddress?.toString()?.uppercase(Locale.getDefault())
+    // Android 13 stores no displayName for chooser-based associations (only
+    // self-managed ones get it; Android 14+ persists the chooser name), so fall
+    // back to the Bluetooth stack's cached name for the bonded device.
+    val cachedName = address?.let { adapter?.getRemoteDevice(it)?.name }
+    return AssociatedDeviceCompat(
+        id = id,
+        address = address ?: "N/A",
+        name = displayName?.toString()?.takeIf { it.isNotBlank() } ?: cachedName ?: "N/A",
+        device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            associatedDevice?.bleDevice?.device
+        } else {
+            null
+        },
+    )
+}

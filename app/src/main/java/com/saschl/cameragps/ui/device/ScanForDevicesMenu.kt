@@ -86,11 +86,10 @@ fun ScanForDevicesMenu(
         when (it.resultCode) {
             CompanionDeviceManager.RESULT_OK -> {
                 it.data?.let { intent ->
-                    DeviceAssociationUtils.getAssociationResult(intent)?.let { device ->
+                    val bluetoothManager = context.getSystemService<BluetoothManager>()
+                    val adapter = bluetoothManager?.adapter
+                    DeviceAssociationUtils.getAssociationResult(intent, adapter)?.let { device ->
                         // Device association successful, now check if pairing is needed
-                        val bluetoothManager = context.getSystemService<BluetoothManager>()
-                        val adapter = bluetoothManager?.adapter
-
                         if (associatedDevices.any { existingDevice -> existingDevice.address == device.address }) {
                             Timber.i("Device ${device.name} already associated, skipping pairing")
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
