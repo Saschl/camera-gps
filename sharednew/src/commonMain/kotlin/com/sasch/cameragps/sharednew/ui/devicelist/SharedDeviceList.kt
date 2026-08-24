@@ -68,6 +68,7 @@ import cameragps.sharednew.generated.resources.trigger_shutter
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.ui.ShutterPulseIcon
 import com.sasch.cameragps.sharednew.ui.TransmissionDot
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -336,15 +337,16 @@ private fun DeviceCard(
     val isRemoteFeatureActive = item?.isRemoteFeatureActive == true
     val isShutterActive = item?.isShutterActive == true
     val haptics = LocalHapticFeedback.current
-    // Success buzz when the shutter sequence ends — the flag clears when the
-    // camera reports the exposure finished, the same edge that stops the
-    // button's pulse animation.
+    // Success buzz when the shutter sequence ends
     var wasShutterActive by remember { mutableStateOf(false) }
     LaunchedEffect(isShutterActive) {
-        if (wasShutterActive && !isShutterActive && hapticsEnabled) {
-            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-        }
+        val sequenceFinished = wasShutterActive && !isShutterActive
         wasShutterActive = isShutterActive
+        if (sequenceFinished && hapticsEnabled) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            delay(160)
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -437,9 +439,7 @@ private fun DeviceCard(
                 FilledTonalButton(
                     onClick = {
                         if (hapticsEnabled) {
-                            // Crisp key-press on trigger, distinct from the Confirm
-                            // buzz fired above when the sequence completes.
-                            haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
                         onTriggerRemoteShutter()
                     },
