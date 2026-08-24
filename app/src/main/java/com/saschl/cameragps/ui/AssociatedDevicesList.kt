@@ -35,6 +35,7 @@ import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
 import com.saschl.cameragps.ui.device.mockDeviceListItems
+import com.saschl.cameragps.utils.PreferencesManager
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -79,6 +80,8 @@ fun AssociatedDevicesList(
         devices = devices,
         items = items,
         showKeepAliveHint = Build.VERSION.SDK_INT < Build.VERSION_CODES.S,
+        // Read on every recomposition so a toggle in settings applies on return
+        hapticsEnabled = PreferencesManager.isHapticsEnabled(context),
         contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
         onConnect = { }, // tap-to-pair path: Android never lists unsaved devices
         onTriggerRemoteShutter = { info ->

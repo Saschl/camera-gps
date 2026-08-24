@@ -45,6 +45,8 @@ import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.enable_app
 import cameragps.sharednew.generated.resources.enable_app_description
+import cameragps.sharednew.generated.resources.haptic_feedback
+import cameragps.sharednew.generated.resources.haptic_feedback_description
 import cameragps.sharednew.generated.resources.log_level
 import cameragps.sharednew.generated.resources.log_settings
 import cameragps.sharednew.generated.resources.settings
@@ -75,11 +77,13 @@ private enum class IosLogLevel {
 internal fun IosSettingsScreen(
     isAppEnabled: Boolean,
     autoScanEnabled: Boolean,
+    hapticsEnabled: Boolean,
     scrollToTipJarOnOpen: Boolean = false,
     onBackClick: () -> Unit,
     onOpenHelp: () -> Unit,
     onAppEnabledChange: (Boolean) -> Unit,
     onAutoScanEnabledChange: (Boolean) -> Unit,
+    onHapticsEnabledChange: (Boolean) -> Unit,
     onShowWelcomeAgain: () -> Unit,
     onChangeLogLevel: (LogLevel) -> Unit,
     onTipJarScrollConsumed: () -> Unit = {},
@@ -127,6 +131,12 @@ internal fun IosSettingsScreen(
                         description = stringResource(Res.string.auto_scan_description),
                         checked = autoScanEnabled,
                         onCheckedChange = onAutoScanEnabledChange,
+                    )
+                    SharedToggleRow(
+                        title = stringResource(Res.string.haptic_feedback),
+                        description = stringResource(Res.string.haptic_feedback_description),
+                        checked = hapticsEnabled,
+                        onCheckedChange = onHapticsEnabledChange,
                     )
                 }
             }

@@ -80,6 +80,8 @@
     <string name="enable_app_description">Allow the app to run and sync GPS data with connected cameras</string>
     <string name="auto_scan">Scan on screen open</string>
     <string name="auto_scan_description">Automatically look for nearby cameras when the devices screen is visible</string>
+    <string name="haptic_feedback">Haptic feedback</string>
+    <string name="haptic_feedback_description">Vibrate when the remote shutter is pressed and when the picture is taken</string>
     <string name="show_welcome_again_description">Reopen the onboarding flow the next time the app starts</string>
     <string name="log_settings">Log Settings</string>
     <string name="log_level">Log Level</string>

@@ -56,6 +56,7 @@ internal fun DeviceListContent(
     items: Map<String, DeviceListItem>,
     isAppEnabled: Boolean,
     isScanning: Boolean,
+    hapticsEnabled: Boolean,
     onOpenSettings: () -> Unit,
     onOpenHelp: () -> Unit,
     onConnect: (BluetoothDeviceInfo) -> Unit,
@@ -147,6 +148,7 @@ internal fun DeviceListContent(
                 SharedDeviceList(
                     devices = devices,
                     items = items,
+                    hapticsEnabled = hapticsEnabled,
                     // Bottom padding keeps the last card above the overlay button
                     contentPadding = PaddingValues(top = 16.dp, bottom = 84.dp),
                     onConnect = onConnect,

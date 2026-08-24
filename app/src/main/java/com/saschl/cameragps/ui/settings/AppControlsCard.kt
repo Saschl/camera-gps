@@ -28,6 +28,8 @@ import cameragps.sharednew.generated.resources.enable_app
 import cameragps.sharednew.generated.resources.enable_app_description
 import cameragps.sharednew.generated.resources.enable_auto_start
 import cameragps.sharednew.generated.resources.enable_auto_start_description
+import cameragps.sharednew.generated.resources.haptic_feedback
+import cameragps.sharednew.generated.resources.haptic_feedback_description
 import cameragps.sharednew.generated.resources.reset_welcome
 import cameragps.sharednew.generated.resources.will_show_welcome
 import com.saschl.cameragps.service.LocationSenderService
@@ -112,6 +114,43 @@ internal fun AppControlsCard(
                 onCheckedChange = { enabled ->
                     PreferencesManager.setAutoStartAfterBootEnabled(context, enabled)
                     isAutoStartAfterRebootEnabled = enabled
+                }
+            )
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = stringResource(Res.string.haptic_feedback),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = stringResource(Res.string.haptic_feedback_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            var isHapticsEnabled by remember {
+                mutableStateOf(PreferencesManager.isHapticsEnabled(context))
+            }
+            Switch(
+                checked = isHapticsEnabled,
+                onCheckedChange = { enabled ->
+                    PreferencesManager.setHapticsEnabled(context, enabled)
+                    isHapticsEnabled = enabled
                 }
             )
         }

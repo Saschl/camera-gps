@@ -84,6 +84,8 @@ fun SharedDeviceList(
     items: Map<String, DeviceListItem>,
     /** Android SDK < S needs always-on to survive; hosts compute this. */
     showKeepAliveHint: Boolean = false,
+    /** User setting: shutter press/completion haptics (default on). */
+    hapticsEnabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 16.dp),
     onConnect: (BluetoothDeviceInfo) -> Unit,
     onTriggerRemoteShutter: (BluetoothDeviceInfo) -> Unit,
@@ -168,6 +170,7 @@ fun SharedDeviceList(
                     device = device,
                     item = items[device.identifier.uppercase()],
                     showKeepAliveHint = showKeepAliveHint,
+                    hapticsEnabled = hapticsEnabled,
                     onConnect = { onConnect(device) },
                     onTriggerRemoteShutter = { onTriggerRemoteShutter(device) },
                     onDeleteRequest = { deviceToDelete = device },
@@ -194,6 +197,7 @@ fun SharedDeviceList(
                     device = device,
                     item = items[device.identifier.uppercase()],
                     showKeepAliveHint = showKeepAliveHint,
+                    hapticsEnabled = hapticsEnabled,
                     onConnect = { deviceToPair = device },
                     onTriggerRemoteShutter = { onTriggerRemoteShutter(device) },
                     onOpenDetails = { onOpenDetails(device) },
@@ -258,6 +262,7 @@ private fun SwipeToDeleteDeviceCard(
     device: BluetoothDeviceInfo,
     item: DeviceListItem?,
     showKeepAliveHint: Boolean,
+    hapticsEnabled: Boolean,
     onConnect: () -> Unit,
     onTriggerRemoteShutter: () -> Unit,
     onDeleteRequest: () -> Unit,
@@ -308,6 +313,7 @@ private fun SwipeToDeleteDeviceCard(
             device = device,
             item = item,
             showKeepAliveHint = showKeepAliveHint,
+            hapticsEnabled = hapticsEnabled,
             onConnect = onConnect,
             onTriggerRemoteShutter = onTriggerRemoteShutter,
             onOpenDetails = onOpenDetails,
@@ -321,6 +327,7 @@ private fun DeviceCard(
     device: BluetoothDeviceInfo,
     item: DeviceListItem?,
     showKeepAliveHint: Boolean,
+    hapticsEnabled: Boolean,
     onConnect: () -> Unit,
     onTriggerRemoteShutter: () -> Unit,
     onOpenDetails: () -> Unit,
@@ -328,6 +335,17 @@ private fun DeviceCard(
     val isTransmissionActive = item?.isTransmissionActive == true
     val isRemoteFeatureActive = item?.isRemoteFeatureActive == true
     val isShutterActive = item?.isShutterActive == true
+    val haptics = LocalHapticFeedback.current
+    // Success buzz when the shutter sequence ends — the flag clears when the
+    // camera reports the exposure finished, the same edge that stops the
+    // button's pulse animation.
+    var wasShutterActive by remember { mutableStateOf(false) }
+    LaunchedEffect(isShutterActive) {
+        if (wasShutterActive && !isShutterActive && hapticsEnabled) {
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        }
+        wasShutterActive = isShutterActive
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -416,10 +434,13 @@ private fun DeviceCard(
                 )
             }
             if (device.isSaved && isRemoteFeatureActive) {
-                val haptics = LocalHapticFeedback.current
                 FilledTonalButton(
                     onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        if (hapticsEnabled) {
+                            // Crisp key-press on trigger, distinct from the Confirm
+                            // buzz fired above when the sequence completes.
+                            haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                        }
                         onTriggerRemoteShutter()
                     },
                     modifier = Modifier

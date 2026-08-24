@@ -105,6 +105,7 @@ internal fun CameraGpsIosApp() {
     }
     var isAppEnabled by remember { mutableStateOf(IosAppPreferences.isAppEnabled()) }
     var autoScanEnabled by remember { mutableStateOf(IosAppPreferences.isAutoScanEnabled()) }
+    var hapticsEnabled by remember { mutableStateOf(IosAppPreferences.isHapticsEnabled()) }
     var isAppInForeground by remember {
         mutableStateOf(
             UIApplication.sharedApplication.applicationState == UIApplicationStateActive
@@ -253,6 +254,7 @@ internal fun CameraGpsIosApp() {
                     items = listItems,
                     isAppEnabled = isAppEnabled,
                     isScanning = autoScanEnabled,
+                    hapticsEnabled = hapticsEnabled,
                     onOpenSettings = { currentScreen = IosScreen.Settings },
                     onOpenHelp = {
                         troubleshootingReturnScreen = IosScreen.Devices
@@ -315,6 +317,11 @@ internal fun CameraGpsIosApp() {
                 onAutoScanEnabledChange = { enabled ->
                     autoScanEnabled = enabled
                     IosAppPreferences.setAutoScanEnabled(enabled)
+                },
+                hapticsEnabled = hapticsEnabled,
+                onHapticsEnabledChange = { enabled ->
+                    hapticsEnabled = enabled
+                    IosAppPreferences.setHapticsEnabled(enabled)
                 },
                 onShowWelcomeAgain = {
                     IosAppPreferences.setShowWelcomeOnLaunch(true)

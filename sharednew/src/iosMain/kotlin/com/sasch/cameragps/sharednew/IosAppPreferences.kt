@@ -10,6 +10,7 @@ internal object IosAppPreferences {
     private const val keyShowWelcome = "ios.showWelcome"
     private const val keyAppEnabled = "ios.appEnabled"
     private const val keyAutoScanEnabled = "ios.autoScanEnabled"
+    private const val keyHapticsEnabled = "ios.hapticsEnabled"
     private const val keyDonationHintLastShown = "ios.donationHintLastShown"
     private const val keyDonationHintShownTimes = "ios.donationHintShownTimes"
     private const val keyForceDonationDialogOnNextStart = "ios.forceDonationDialogOnNextStart"
@@ -41,6 +42,14 @@ internal object IosAppPreferences {
 
     fun setAutoScanEnabled(enabled: Boolean) {
         defaults.setBool(enabled, forKey = keyAutoScanEnabled)
+    }
+
+    fun isHapticsEnabled(): Boolean = defaults.objectForKey(keyHapticsEnabled)?.let {
+        defaults.boolForKey(keyHapticsEnabled)
+    } ?: true
+
+    fun setHapticsEnabled(enabled: Boolean) {
+        defaults.setBool(enabled, forKey = keyHapticsEnabled)
     }
 
     fun donationHintLastShownDaysAgo(initialize: Boolean = false): Long {
