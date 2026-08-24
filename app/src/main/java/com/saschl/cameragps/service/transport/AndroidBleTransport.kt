@@ -339,7 +339,7 @@ class AndroidBleTransport(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
-            Timber.i("Characteristic changed: ${characteristic.uuid}, value=${value.joinToString(",")}")
+            Timber.d("Characteristic changed: ${characteristic.uuid}, value=${value.joinToString(",")}")
             eventChannel.trySend(
                 BleTransportEvent.CharacteristicChanged(
                     gatt.device.address.uppercase(),
