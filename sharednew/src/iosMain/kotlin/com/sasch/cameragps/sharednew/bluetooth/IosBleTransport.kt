@@ -305,7 +305,7 @@ internal class IosBleTransport(
             log.v { "Write for $sharedUuid completed (error=${error?.code} / ${error?.localizedDescription})" }
 
             if (error != null && !isAuthenticationError(error)) {
-                log.e { "BLE write failed for $sharedUuid: ${error.localizedDescription}" }
+                log.e { "BLE write failed for $sharedUuid: ${error.localizedDescription} ${error.code}" }
             }
             eventChannel.trySend(
                 BleTransportEvent.CharacteristicWritten(id, sharedUuid, statusOf(error))
