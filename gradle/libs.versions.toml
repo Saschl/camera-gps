@@ -32,7 +32,7 @@ kotlinTest = "2.3.21"
 runner = "1.7.0"
 core = "1.7.0"
 sqlite = "2.7.0"
-kotlinxDatetime = "0.8.0"
+kotlinxDatetime = "0.8.0-0.6.x-compat"
 
 
 
