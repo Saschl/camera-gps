@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.jetbrains.compose)
     id("androidx.room")
     id("com.google.devtools.ksp")
-    id("io.sentry.android.gradle") version "6.19.0"
+    id("io.sentry.android.gradle") version "6.20.0"
 }
 
 room {
