@@ -241,4 +241,23 @@
     <string name="guide_link_location_zve10">索尼帮助指南：位置信息。链接设置。（ZV-E10）</string>
     <string name="guide_repair_title">摄像头可以连接，但 GPS 无法工作</string>
     <string name="guide_repair_description">典型情况是之前用索尼的 Creators' App 或 Imaging Edge Mobile 设置相机时：手机已经与相机配对，因此不会请求新的配对——但 Alpha GPS 的位置传输无法正常工作。在所有地方移除旧配对可以解决这个问题。</string>
+    <string name="guide_repair_step_phone">从手机的蓝牙设置中删除摄像头：</string>
+    <string name="guide_repair_step_phone_path_android">设置 → 蓝牙 → 你的相机 → 取消配对</string>
+    <string name="guide_repair_step_phone_path_ios">设置 → 蓝牙 → 相机旁边的ⓘ → 忘记此设备</string>
+    <string name="guide_repair_step_camera">在相机上，删除旧的配对（旧型号没有此菜单项——在那里，再次配对只是替换旧的连接）：</string>
+    <string name="guide_repair_step_camera_path">MENU → 网络→ 蓝牙→ 管理配对设备</string>
+    <string name="guide_repair_step_sony_app">如果仍安装了索尼应用程序，请同时删除其中的摄像头：</string>
+    <string name="guide_repair_step_sony_app_path">创作者应用 → 相机→ 设置→ 不配对</string>
+    <string name="guide_repair_step_pair_again">在 Alpha GPS 中重新设置相机：将其置于配对模式并开始新的扫描。</string>
+    <string name="guide_remote_title">关闭蓝牙遥控器（旧款相机）</string>
+    <string name="guide_remote_description">像 α6400 这样的相机不能同时使用蓝牙遥控器和位置链接——当遥控器打开时，连接或 GPS 传输停止工作。较新的型号（如 α7 IV 及更高版本）支持这两种。</string>
+    <string name="guide_remote_step_camera">在相机上，关闭蓝牙遥控器：</string>
+    <string name="guide_remote_step_camera_path">MENU → 网络→ 蓝牙 Rmt 控制→ Off</string>
+    <string name="guide_remote_step_app">在 Alpha GPS 中，点击主屏幕上的摄像头并关闭“启用远程控制”。</string>
+    <string name="guide_link_remote_a6400">索尼帮助指南：蓝牙Rmt Ctrl（α6400）</string>
+    <string name="guide_accuracy_title">位置不精确或过时</string>
+    <string name="guide_accuracy_description">如果照片被标记为明显偏离的位置，则应用程序通常不允许使用您的精确位置。</string>
+    <string name="guide_accuracy_step_precise">允许 Alpha GPS 的精确定位：</string>
+    <string name="guide_accuracy_step_precise_path_android">设置→ 应用 → Alpha GPS→ 权限→ 位置→ 使用精确位置</string>
+    <string name="guide_accuracy_step_precise_path_ios">设置→ 隐私和安全→ 定位服务→ Alpha GPS→ 精确位置→ On</string>
 </resources>

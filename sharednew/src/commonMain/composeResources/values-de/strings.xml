@@ -230,7 +230,7 @@
     <string name="tip_jar_unavailable">Spenden sind momentan nicht möglich.</string>
     <string name="tip_jar_error_prefix">Etwas ist schief gelaufen:</string>
     <string name="tip_jar_dismiss">Verwerfen</string>
-    <string name="donation_dialog_title">Gefällt die Alpha GPS?</string>
+    <string name="donation_dialog_title">Gefällt dir Alpha GPS?</string>
     <string name="donation_dialog_message">Falls die App dich beim Fotografieren unterstützt, würde ich mich über eine kleine Spende freuen. Das ist natürlich komplett optional, unterstützt jedoch die Weiterentwicklung.</string>
     <string name="donation_dialog_confirm">Unterstütze das Projekt</string>
     <string name="donation_dialog_dismiss">Nicht jetzt</string>
@@ -286,4 +286,6 @@
     <string name="handshake_delay_seconds">%1$d s</string>
     <string name="trigger_shutter">Fernauslöser</string>
     <string name="remote_feature_inactive">Verbunden. Fernauslöser deaktiviert in der Kamera oder in der App</string>
+    <string name="haptic_feedback">Haptisches Feedback</string>
+    <string name="haptic_feedback_description">Lässt das Smartphone vibrieren, wenn der Fernauslöser aktiviert wird</string>
 </resources>

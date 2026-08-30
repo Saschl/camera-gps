@@ -228,7 +228,7 @@
     <string name="donation_dialog_confirm">Dukung proyek</string>
     <string name="donation_dialog_dismiss">Tidak sekarang</string>
     <string name="guide_title">Panduan Pemecahan Masalah</string>
-    <string name="guide_intro">Perbaikan langkah demi langkah untuk masalah yang paling umum.</string>
+    <string name="guide_intro">Ketuk di sini untuk perbaikan langkah demi langkah bagi masalah paling umum.</string>
     <string name="guide_open_button">Buka panduan pemecahan masalah</string>
     <string name="guide_location_link_title">Aktifkan pengaitan lokasi &amp; zona waktu (kamera lama)</string>
     <string name="guide_location_link_description">Pada kamera dengan tata letak menu lama (mis. α6400, ZV-E10, α6100, α7 III), pengaitan lokasi harus diaktifkan secara manual. Kamera yang lebih baru akan mengaktifkannya secara otomatis saat app tersambung.</string>
@@ -271,4 +271,15 @@
     <string name="trigger_shutter">Picu rana jarak jauh</string>
     <string name="remote_feature_inactive">Tersambung. Remote nonaktif di kamera atau app</string>
     <string name="enable_remote_control">Aktifkan kontrol jarak jauh</string>
+    <string name="haptic_feedback">Umpan balik haptik</string>
+    <string name="haptic_feedback_description">Getar saat tombol rana remote ditekan dan saat foto diambil</string>
+    <string name="handshake_delay_title">Tunda penyiapan koneksi</string>
+    <string name="handshake_delay_description">Menunggu setelah kamera terhubung sebelum aplikasi memulai penyiapan GPS. Coba beberapa detik jika kamera ini mulai lambat atau layarnya tetap hitam saat aplikasi diaktifkan.</string>
+    <string name="handshake_delay_off">Mati</string>
+    <string name="handshake_delay_seconds">%1$d d</string>
+    <string name="enable_pairing_mode_title">Aktifkan Mode Pemasangan</string>
+    <string name="enable_pairing_mode_message">Jika ini pertama kalinya Anda menghubungkan kamera ini ke ponsel, pastikan untuk mengaktifkan mode pemasangan Bluetooth di pengaturan kamera sebelum melanjutkan. Jika tidak, cukup lanjutkan</string>
+    <string name="enable_pairing_mode_continue">Lanjutkan</string>
+    <string name="dialog_ok">OK</string>
+    <string name="setting_info">Informasi selengkapnya</string>
 </resources>
