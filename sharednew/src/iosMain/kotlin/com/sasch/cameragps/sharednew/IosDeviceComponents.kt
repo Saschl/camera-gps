@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,10 +40,18 @@ import cameragps.sharednew.generated.resources.ios_troubleshooting_step_4_locati
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_5_creators_app
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_6_remote_control
 import cameragps.sharednew.generated.resources.ios_troubleshooting_title
+import cameragps.sharednew.generated.resources.ios_accessory_migration_action
+import cameragps.sharednew.generated.resources.ios_accessory_migration_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_restart
+import cameragps.sharednew.generated.resources.ios_accessory_migration_title
+import cameragps.sharednew.generated.resources.ios_add_camera
+import cameragps.sharednew.generated.resources.ios_no_cameras_message
+import cameragps.sharednew.generated.resources.ios_no_cameras_title
 import cameragps.sharednew.generated.resources.scanning_for_cameras
 import cameragps.sharednew.generated.resources.scanning_paused_message
 import cameragps.sharednew.generated.resources.scanning_paused_title
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
+import com.sasch.cameragps.sharednew.bluetooth.accessory.PendingMigration
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
 import com.sasch.cameragps.sharednew.ui.devicelist.EmptyStateCard
 import com.sasch.cameragps.sharednew.ui.devicelist.SharedDeviceList
@@ -55,8 +67,13 @@ internal fun DeviceListContent(
     devices: List<BluetoothDeviceInfo>,
     items: Map<String, DeviceListItem>,
     isAppEnabled: Boolean,
-    isScanning: Boolean,
     hapticsEnabled: Boolean,
+    /** Saved cameras that still need confirming in the iOS setup sheet. */
+    migrationCandidates: List<PendingMigration>,
+    /** True when the remaining cameras can only be confirmed after a restart. */
+    migrationNeedsRestart: Boolean,
+    onMigrate: () -> Unit,
+    onAddCamera: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHelp: () -> Unit,
     onConnect: (BluetoothDeviceInfo) -> Unit,
@@ -110,52 +127,50 @@ internal fun DeviceListContent(
                 )
             }
 
-            devices.isEmpty() && !isScanning -> {
-                EmptyStateCard(
-                    title = stringResource(Res.string.scanning_paused_title),
-                    message = stringResource(Res.string.scanning_paused_message),
-                    actionLabel = stringResource(Res.string.app_settings),
-                    onAction = onOpenSettings,
+            // Saved-but-unconfirmed cameras still populate the list from the
+            // database, so this branch must NOT be gated on the list being
+            // empty: doing that hid the prompt from exactly the users who had
+            // cameras to confirm, leaving rows that could never connect.
+            migrationCandidates.isNotEmpty() && devices.isEmpty() -> {
+                MigrationCard(
+                    needsRestart = migrationNeedsRestart,
+                    onMigrate = onMigrate,
                 )
             }
 
             devices.isEmpty() -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    ) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(Res.string.scanning_for_cameras),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = stringResource(Res.string.ios_no_devices_message),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                EmptyStateCard(
+                    title = stringResource(Res.string.ios_no_cameras_title),
+                    message = stringResource(Res.string.ios_no_cameras_message),
+                    actionLabel = stringResource(Res.string.ios_add_camera),
+                    onAction = onAddCamera,
+                )
             }
 
             else -> {
-                SharedDeviceList(
-                    devices = devices,
-                    items = items,
-                    hapticsEnabled = hapticsEnabled,
-                    // Bottom padding keeps the last card above the overlay button
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 84.dp),
-                    onConnect = onConnect,
-                    onTriggerRemoteShutter = onTriggerRemoteShutter,
-                    onDelete = onDelete,
-                    onOpenDetails = onOpenDetails,
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Above the list rather than instead of it: a camera that is
+                    // already confirmed has to stay usable while another one is
+                    // still waiting.
+                    if (migrationCandidates.isNotEmpty()) {
+                        MigrationCard(
+                            needsRestart = migrationNeedsRestart,
+                            onMigrate = onMigrate,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
+                    SharedDeviceList(
+                        devices = devices,
+                        items = items,
+                        hapticsEnabled = hapticsEnabled,
+                        // Bottom padding keeps the last card above the overlay button
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 84.dp),
+                        onConnect = onConnect,
+                        onTriggerRemoteShutter = onTriggerRemoteShutter,
+                        onDelete = onDelete,
+                        onOpenDetails = onOpenDetails,
+                    )
+                }
             }
         }
 
@@ -166,6 +181,53 @@ internal fun DeviceListContent(
             onClick = { showTroubleshootingDialog = true },
         ) {
             Text(stringResource(Res.string.ios_troubleshooting_need_help))
+        }
+    }
+}
+
+/**
+ * Prompt to confirm cameras saved before the AccessorySetupKit switch.
+ *
+ * Rendered both as the whole screen (nothing else to show) and as a banner above
+ * an existing list, because an unconfirmed camera still appears in the list from
+ * the database and would otherwise look like an ordinary device that simply
+ * refuses to connect.
+ */
+@Composable
+private fun MigrationCard(
+    needsRestart: Boolean,
+    onMigrate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.ios_accessory_migration_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = if (needsRestart) {
+                    stringResource(Res.string.ios_accessory_migration_restart)
+                } else {
+                    stringResource(Res.string.ios_accessory_migration_message)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!needsRestart) {
+                TextButton(onClick = onMigrate) {
+                    Text(stringResource(Res.string.ios_accessory_migration_action))
+                }
+            }
         }
     }
 }

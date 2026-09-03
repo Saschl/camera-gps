@@ -25,6 +25,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.always_location
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_title
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_later
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_confirm
 import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.donation_dialog_confirm
@@ -36,6 +41,7 @@ import cameragps.sharednew.generated.resources.header_device_list
 import cameragps.sharednew.generated.resources.info_24px
 import cameragps.sharednew.generated.resources.ios_troubleshooting_got_it
 import cameragps.sharednew.generated.resources.open_location_settings
+import cameragps.sharednew.generated.resources.open_settings_for_always_location
 import cameragps.sharednew.generated.resources.open_settings_for_precise_location
 import cameragps.sharednew.generated.resources.pairing_failed_device_message
 import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
@@ -114,6 +120,10 @@ internal fun CameraGpsIosApp() {
     var showDonationDialog by remember { mutableStateOf(false) }
     val pairingFailedDeviceName by bluetoothController.pairingFailedDevice.collectAsState()
     var showRequestPreciseAccuracyPermissionDialog by remember { mutableStateOf(false) }
+    val needsAlwaysLocationAuthorization by
+        bluetoothController.needsAlwaysLocationAuthorization.collectAsState()
+    // Dismissal only lasts until the app comes back to the foreground.
+    var alwaysLocationHintDismissed by remember { mutableStateOf(false) }
     var scrollToTipJarOnSettingsOpen by remember { mutableStateOf(false) }
     var forceDonationDialogThisLaunch by remember { mutableStateOf(false) }
     var selectedDeviceIdentifier by remember { mutableStateOf<String?>(null) }
@@ -157,6 +167,7 @@ internal fun CameraGpsIosApp() {
     LaunchedEffect(lifecycleState) {
         when (lifecycleState) {
             Lifecycle.State.RESUMED -> {
+                alwaysLocationHintDismissed = false
                 if (!bluetoothController.hasPreciseAccuracyAuthorization()) {
                     showRequestPreciseAccuracyPermissionDialog = true
                 }
@@ -166,13 +177,49 @@ internal fun CameraGpsIosApp() {
         }
 
     }
-    LaunchedEffect(currentScreen, isAppEnabled, autoScanEnabled, isAppInForeground) {
+    val migrationCandidates by bluetoothController.migrationCandidates.collectAsState()
+    val migrationNeedsRestart by bluetoothController.migrationNeedsRestart.collectAsState()
+    // No scan effect any more: AccessorySetupKit owns discovery, and with it
+    // declared a CoreBluetooth scan can only ever return already-authorized
+    // accessories. Cameras are added through the system picker instead.
+
+    // iOS has no post-update hook, so the migration sheet is raised on the first
+    // foreground pass after the update instead of waiting for the user to find
+    // the card. The controller limits this to one attempt per launch.
+    var showMigrationExplainer by remember { mutableStateOf(false) }
+    LaunchedEffect(migrationCandidates, isAppInForeground) {
         if (SCREENSHOT_MODE) return@LaunchedEffect
-        if (currentScreen == IosScreen.Devices && isAppEnabled && autoScanEnabled && isAppInForeground) {
-            bluetoothController.startScan()
-        } else {
-            bluetoothController.stopScan()
+        if (!isAppInForeground) return@LaunchedEffect
+        // The notification permission alert cannot be shown from the background
+        // and iOS only offers it once, so a request made while backgrounded is
+        // parked and run here instead.
+        IosMigrationReminder.flushDeferredAuthorizationRequest()
+        // Explain before the system sheet appears, rather than letting it show
+        // up unannounced. Continue then opens the picker as a user action.
+        if (bluetoothController.consumeAutoMigrationPrompt()) {
+            showMigrationExplainer = true
         }
+    }
+
+    if (showMigrationExplainer) {
+        AlertDialog(
+            onDismissRequest = { showMigrationExplainer = false },
+            title = { Text(stringResource(Res.string.ios_accessory_migration_dialog_title)) },
+            text = { Text(stringResource(Res.string.ios_accessory_migration_dialog_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMigrationExplainer = false
+                    scope.launch { bluetoothController.presentMigrationPicker() }
+                }) {
+                    Text(stringResource(Res.string.ios_accessory_migration_dialog_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMigrationExplainer = false }) {
+                    Text(stringResource(Res.string.ios_accessory_migration_dialog_later))
+                }
+            },
+        )
     }
 
     LaunchedEffect(currentScreen, isAppInForeground, devices, showDonationDialog) {
@@ -253,8 +300,11 @@ internal fun CameraGpsIosApp() {
                     devices = devices,
                     items = listItems,
                     isAppEnabled = isAppEnabled,
-                    isScanning = autoScanEnabled,
                     hapticsEnabled = hapticsEnabled,
+                    migrationCandidates = migrationCandidates,
+                    migrationNeedsRestart = migrationNeedsRestart,
+                    onMigrate = { scope.launch { bluetoothController.presentMigrationPicker() } },
+                    onAddCamera = { scope.launch { bluetoothController.presentAccessoryPicker() } },
                     onOpenSettings = { currentScreen = IosScreen.Settings },
                     onOpenHelp = {
                         troubleshootingReturnScreen = IosScreen.Devices
@@ -422,26 +472,40 @@ internal fun CameraGpsIosApp() {
             },
         )
     }
-    if (showRequestPreciseAccuracyPermissionDialog) {
+    val showAlwaysLocationHint = needsAlwaysLocationAuthorization && !alwaysLocationHintDismissed
+    if (showAlwaysLocationHint) {
         AlertDialog(
-            onDismissRequest = { showDonationDialog = false },
+            onDismissRequest = { alwaysLocationHintDismissed = true },
+            title = { Text(text = stringResource(Res.string.always_location)) },
+            text = { Text(text = stringResource(Res.string.open_settings_for_always_location)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        alwaysLocationHintDismissed = true
+                        openAppSettings()
+                    }
+                ) {
+                    Text(text = stringResource(Res.string.open_location_settings))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { alwaysLocationHintDismissed = true }) {
+                    Text(text = stringResource(Res.string.cancel_button))
+                }
+            }
+        )
+    }
+    // Both hints point at the same settings page — show only one at a time.
+    if (showRequestPreciseAccuracyPermissionDialog && !showAlwaysLocationHint) {
+        AlertDialog(
+            onDismissRequest = { showRequestPreciseAccuracyPermissionDialog = false },
             title = { Text(text = stringResource(Res.string.precise_location)) },
             text = { Text(text = stringResource(Res.string.open_settings_for_precise_location)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showRequestPreciseAccuracyPermissionDialog = false
-                        val settingsUrl = NSURL.URLWithString(UIApplicationOpenSettingsURLString)
-
-                        if (settingsUrl != null && UIApplication.sharedApplication.canOpenURL(
-                                settingsUrl
-                            )
-                        ) {
-                            UIApplication.sharedApplication.openURL(
-                                settingsUrl,
-                                emptyMap<Any?, Any>(),
-                                {})
-                        }
+                        openAppSettings()
                     }
                 ) {
                     Text(text = stringResource(Res.string.open_location_settings))
@@ -454,5 +518,16 @@ internal fun CameraGpsIosApp() {
 
             }
         )
+    }
+}
+
+/**
+ * Opens this app's page in the Settings app (one tap away from its Location
+ * settings) — the deepest link Apple's public API allows.
+ */
+private fun openAppSettings() {
+    val settingsUrl = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
+    if (UIApplication.sharedApplication.canOpenURL(settingsUrl)) {
+        UIApplication.sharedApplication.openURL(settingsUrl, emptyMap<Any?, Any>(), {})
     }
 }

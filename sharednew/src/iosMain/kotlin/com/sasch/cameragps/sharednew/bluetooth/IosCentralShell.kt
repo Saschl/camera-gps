@@ -1,5 +1,10 @@
 package com.sasch.cameragps.sharednew.bluetooth
 
+import com.diamondedge.logging.logging
+import com.sasch.cameragps.sharednew.IosLaunchContext
+import com.sasch.cameragps.sharednew.bluetooth.restore.PeripheralRestoreState
+import com.sasch.cameragps.sharednew.bluetooth.restore.RestorePolicy
+import com.sasch.cameragps.sharednew.bluetooth.restore.ScanAction
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.coroutines.CoroutineScope
@@ -14,15 +19,27 @@ import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
 import platform.CoreBluetooth.CBCentralManagerOptionRestoreIdentifierKey
 import platform.CoreBluetooth.CBCentralManagerRestoredStatePeripheralsKey
+import platform.CoreBluetooth.CBCentralManagerRestoredStateScanOptionsKey
+import platform.CoreBluetooth.CBCentralManagerRestoredStateScanServicesKey
 import platform.CoreBluetooth.CBConnectPeripheralOptionEnableAutoReconnect
 import platform.CoreBluetooth.CBConnectPeripheralOptionNotifyOnConnectionKey
+import platform.CoreBluetooth.CBManagerState
+import platform.CoreBluetooth.CBManagerStatePoweredOff
 import platform.CoreBluetooth.CBManagerStatePoweredOn
+import platform.CoreBluetooth.CBManagerStateResetting
+import platform.CoreBluetooth.CBManagerStateUnauthorized
+import platform.CoreBluetooth.CBManagerStateUnknown
+import platform.CoreBluetooth.CBManagerStateUnsupported
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralStateConnected
+import platform.CoreBluetooth.CBPeripheralStateConnecting
+import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSNumber
 import platform.Foundation.NSUUID
+import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationState.UIApplicationStateActive
 import platform.darwin.NSObject
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -50,9 +67,26 @@ internal class IosCentralShell(
     private val isAppEnabled: () -> Boolean,
     private val shouldAutoReconnect: suspend (String) -> Boolean,
     private val onPoweredOn: (restored: List<CBPeripheral>) -> Unit,
+    /**
+     * Central power state changed. Like [onPoweredOn] this only ever fires
+     * asynchronously after construction, so it may read the controller's `shell`
+     * field.
+     */
+    private val onCentralStateChanged: (poweredOn: Boolean) -> Unit,
     private val onPeripheralConnected: (String) -> Unit,
     private val onKnownPeripheralsChanged: (IosCentralShell) -> Unit,
 ) {
+
+    private val log = logging()
+
+    /**
+     * Service filter of a scan the system restored on our behalf, and whether
+     * there was one at all. Read in `willRestoreState`, acted on at power-on:
+     * a restored scan keeps running until somebody stops it, and on a background
+     * launch there is no UI to do that.
+     */
+    private var restoredScanServices: List<CBUUID>? = null
+    private var scanWasRestored = false
 
     // UUID string -> CBPeripheral
     private val discovered = mutableMapOf<String, CBPeripheral>()
@@ -61,6 +95,9 @@ internal class IosCentralShell(
     /** Read-only views for device-list assembly and name resolution. */
     val discoveredPeripherals: Map<String, CBPeripheral> get() = discovered
     val connectedPeripherals: Map<String, CBPeripheral> get() = connected
+
+    /** How many restored peripherals are waiting for power-on. Diagnostics only. */
+    val parkedRestoredCount: Int get() = restoredAwaitingPowerOn.size
 
     /**
      * Peripherals handed back by state restoration before the central reported
@@ -93,6 +130,9 @@ internal class IosCentralShell(
         /** CoreBluetooth connects never time out on their own; bound the callers. */
         const val CONNECT_TIMEOUT_MS = 30_000L
         const val DISCONNECT_TIMEOUT_MS = 10_000L
+
+        /** Bluetooth SIG company identifier for Sony, as advertised by the cameras. */
+        const val SONY_COMPANY_ID = 0x012D
     }
 
     // ---------------------------------------------------------------------------
@@ -102,35 +142,71 @@ internal class IosCentralShell(
         object : NSObject(), CBCentralManagerDelegateProtocol {
 
             override fun centralManagerDidUpdateState(central: CBCentralManager) {
-                if (central.state == CBManagerStatePoweredOn) {
+                val poweredOn = central.state == CBManagerStatePoweredOn
+                log.i { "Central state: ${stateName(central.state)}" }
+                onCentralStateChanged(poweredOn)
+
+                if (poweredOn) {
+                    applyRestoredScanPolicy()
                     val restored = restoredAwaitingPowerOn.toList()
                     restoredAwaitingPowerOn.clear()
                     onPoweredOn(restored)
+                    return
                 }
+
+                // PoweredOff/Resetting/Unauthorized/Unsupported invalidate every
+                // peripheral, and CoreBluetooth does not reliably deliver
+                // didDisconnectPeripheral for them. Without an explicit teardown
+                // the connected map keeps stale entries forever: the list shows
+                // "connected", sessions stay ready, and
+                // LocationTransmissionManager never stops location.
+                //
+                // Unknown is deliberately excluded. It is the pre-initialization
+                // state and does not invalidate anything, and on a restoration
+                // launch it can arrive after willRestoreState has already handed
+                // us live peripherals — tearing those down would throw away the
+                // restoration this whole path exists to serve.
+                if (central.state != CBManagerStateUnknown) tearDownAllConnections()
             }
 
             override fun centralManager(central: CBCentralManager, willRestoreState: Map<Any?, *>) {
                 @Suppress("UNCHECKED_CAST")
+                restoredScanServices =
+                    willRestoreState[CBCentralManagerRestoredStateScanServicesKey] as? List<CBUUID>
+                scanWasRestored = restoredScanServices != null ||
+                        willRestoreState[CBCentralManagerRestoredStateScanOptionsKey] != null
+
                 val restoredPeripherals =
                     willRestoreState[CBCentralManagerRestoredStatePeripheralsKey] as? List<*>
-                        ?: return
+                        ?: emptyList<Any?>()
 
+                log.i {
+                    "willRestoreState: ${restoredPeripherals.size} peripheral(s), " +
+                            "scanRestored=$scanWasRestored " +
+                            "scanServices=${restoredScanServices?.map { it.UUIDString }}, " +
+                            "appEnabled=${isAppEnabled()}"
+                }
+
+                val appEnabled = isAppEnabled()
                 restoredPeripherals.forEach { any ->
                     val peripheral = any as? CBPeripheral ?: return@forEach
-                    if (isAppEnabled()) {
-                        val id = peripheral.identifier.UUIDString
-                        // Re-set the delegate right away: CoreBluetooth delivers the
-                        // callbacks that relaunched the app immediately after
-                        // restoration, and they are dropped while the delegate is unset.
-                        if (peripheral.state == CBPeripheralStateConnected) {
-                            transport.registerPeripheral(peripheral)
-                            connected[id] = peripheral
-                        }
-                        discovered[id] = peripheral
-                    }
+                    val id = peripheral.identifier.UUIDString
+                    val state = restoreStateOf(peripheral)
+                    log.i { "Restored peripheral $id in state $state" }
+
+                    val action = RestorePolicy.onWillRestore(state, appEnabled)
+                    // Re-set the delegate right away: CoreBluetooth delivers the
+                    // callbacks that relaunched the app immediately after
+                    // restoration, and they are dropped while the delegate is unset.
+                    // This covers a peripheral restored mid-connect too, which is
+                    // the most common restoration shape here — registering only
+                    // assigns the delegate, it does not announce a connection.
+                    if (action.registerDelegate) transport.registerPeripheral(peripheral)
+                    if (action.markConnected) connected[id] = peripheral
+                    if (action.trackAsDiscovered) discovered[id] = peripheral
                     // Announcing/cancelling is deferred to PoweredOn (see
                     // restoredAwaitingPowerOn) — the central cannot act yet.
-                    restoredAwaitingPowerOn += peripheral
+                    if (action.park) restoredAwaitingPowerOn += peripheral
                 }
                 onKnownPeripheralsChanged(this@IosCentralShell)
             }
@@ -145,9 +221,12 @@ internal class IosCentralShell(
                 if (mfgData == null || mfgData.length < 2u) return
                 val bytes = mfgData.toByteArray()
                 val companyId = (bytes[0].toInt() and 0xFF) or ((bytes[1].toInt() and 0xFF) shl 8)
-                if (companyId != 0x012D) return
+                if (companyId != SONY_COMPANY_ID) return
 
                 val id = didDiscoverPeripheral.identifier.UUIDString
+                if (id !in discovered) {
+                    log.d { "Discovered Sony peripheral $id (${didDiscoverPeripheral.name})" }
+                }
                 discovered[id] = didDiscoverPeripheral
                 onKnownPeripheralsChanged(this@IosCentralShell)
             }
@@ -157,6 +236,7 @@ internal class IosCentralShell(
                 didConnectPeripheral: CBPeripheral,
             ) {
                 val id = didConnectPeripheral.identifier.UUIDString
+                log.i { "Connected to $id (${didConnectPeripheral.name})" }
                 connected[id] = didConnectPeripheral
                 // The orchestrator drives service discovery + handshake from here
                 transport.attachPeripheral(didConnectPeripheral)
@@ -171,9 +251,11 @@ internal class IosCentralShell(
                 error: NSError?,
             ) {
                 val id = didFailToConnectPeripheral.identifier.UUIDString
+                log.w { "Failed to connect $id: ${error?.localizedDescription}" }
                 connectionEvents.tryEmit(ConnectionEvent.ConnectFailed(id))
                 scope.launch {
                     if (central.state == CBManagerStatePoweredOn && shouldAutoReconnect(id)) {
+                        log.i { "Re-issuing pending connect for $id after connect failure" }
                         central.connectPeripheral(didFailToConnectPeripheral, options = null)
                     }
                 }
@@ -188,6 +270,10 @@ internal class IosCentralShell(
                 error: NSError?,
             ) {
                 val id = didDisconnectPeripheral.identifier.UUIDString
+                log.i {
+                    "Disconnected $id isReconnecting=$isReconnecting " +
+                            "error=${error?.localizedDescription}"
+                }
                 connected.remove(id)
                 // Emits Disconnected → orchestrator clears the session, cancels queued
                 // operations and re-evaluates location tracking
@@ -196,6 +282,7 @@ internal class IosCentralShell(
 
                 scope.launch {
                     if (central.state == CBManagerStatePoweredOn && shouldAutoReconnect(id)) {
+                        log.i { "Re-issuing pending connect for $id after disconnect" }
                         central.connectPeripheral(didDisconnectPeripheral, options = null)
                     }
                 }
@@ -244,10 +331,23 @@ internal class IosCentralShell(
         central.retrievePeripheralsWithIdentifiers(identifiers.map { NSUUID(uUIDString = it) })
             .filterIsInstance<CBPeripheral>()
 
-    fun startScanIfNeeded() {
-        if (isPoweredOn && !central.isScanning) {
-            central.scanForPeripheralsWithServices(serviceUUIDs = null, options = null)
+    /**
+     * Start scanning, if it is both needed and useful.
+     *
+     * iOS delivers no discoveries at all from an unfiltered scan once the app
+     * leaves the foreground, and it strips manufacturer data from background
+     * results, so an unfiltered background scan burns radio for nothing. Refuse
+     * it rather than letting the mistake recur; a caller that has a real service
+     * filter may scan anywhere.
+     */
+    fun startScanIfNeeded(serviceUUIDs: List<CBUUID>? = null) {
+        if (!isPoweredOn || central.isScanning) return
+        if (!RestorePolicy.allowsScan(hasServiceFilter = serviceUUIDs != null, appActive = isAppActive())) {
+            log.w { "Refusing an unfiltered scan while the app is not foreground-active" }
+            return
         }
+        log.i { "Starting scan (filter=${serviceUUIDs?.map { it.UUIDString } ?: "none"})" }
+        central.scanForPeripheralsWithServices(serviceUUIDs = serviceUUIDs, options = null)
     }
 
     fun stopScan() {
@@ -384,5 +484,73 @@ internal class IosCentralShell(
             connectionEvents.tryEmit(ConnectionEvent.Disconnected(it))
         }
         connected.clear()
+    }
+
+    // ---------------------------------------------------------------------------
+    // Internals
+    // ---------------------------------------------------------------------------
+
+    private fun isAppActive(): Boolean =
+        UIApplication.sharedApplication.applicationState == UIApplicationStateActive
+
+    private fun restoreStateOf(peripheral: CBPeripheral): PeripheralRestoreState =
+        when (peripheral.state) {
+            CBPeripheralStateConnected -> PeripheralRestoreState.Connected
+            CBPeripheralStateConnecting -> PeripheralRestoreState.Connecting
+            else -> PeripheralRestoreState.Other
+        }
+
+    /**
+     * A scan the system restored keeps running on the app's behalf. On a
+     * background launch no UI is ever attached, so the device-list scan effect
+     * that normally owns scanning never runs and would never stop it.
+     */
+    private fun applyRestoredScanPolicy() {
+        if (!scanWasRestored) return
+        val action = RestorePolicy.scanOnPowerOn(
+            launchKind = IosLaunchContext.launchKind,
+            appActive = isAppActive(),
+            appEnabled = isAppEnabled(),
+            scanWasRestored = true,
+        )
+        if (action == ScanAction.Stop) {
+            log.i { "Stopping the scan restored by the system" }
+            stopScanIfNeeded()
+        }
+        scanWasRestored = false
+        restoredScanServices = null
+    }
+
+    /**
+     * Tear down every known link after the central left PoweredOn. Mirrors what
+     * a real disconnect does, because CoreBluetooth will not send one here.
+     */
+    private fun tearDownAllConnections() {
+        val known = LinkedHashSet<String>().apply {
+            addAll(connected.keys)
+            addAll(discovered.keys)
+        }
+        if (known.isEmpty()) return
+        log.i { "Central left PoweredOn — tearing down ${connected.size} connection(s)" }
+
+        connected.keys.toList().forEach { transport.detachPeripheral(it) }
+        known.forEach { connectionEvents.tryEmit(ConnectionEvent.Disconnected(it)) }
+
+        connected.clear()
+        discovered.clear()
+        // restoredAwaitingPowerOn is deliberately kept: it is drained on the next
+        // PoweredOn, and dropping it would lose the disabled-device cancel path
+        // for peripherals the system restored.
+        onKnownPeripheralsChanged(this@IosCentralShell)
+    }
+
+    private fun stateName(state: CBManagerState): String = when (state) {
+        CBManagerStatePoweredOn -> "PoweredOn"
+        CBManagerStatePoweredOff -> "PoweredOff"
+        CBManagerStateResetting -> "Resetting"
+        CBManagerStateUnauthorized -> "Unauthorized"
+        CBManagerStateUnsupported -> "Unsupported"
+        CBManagerStateUnknown -> "Unknown"
+        else -> "state=$state"
     }
 }

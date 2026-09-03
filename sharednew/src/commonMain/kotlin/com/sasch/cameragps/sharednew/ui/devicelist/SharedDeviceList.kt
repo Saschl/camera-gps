@@ -214,7 +214,8 @@ fun SharedDeviceList(
 internal fun EmptyStateCard(
     title: String,
     message: String,
-    actionLabel: String,
+    /** Null hides the action button, for a card that only explains something. */
+    actionLabel: String?,
     onAction: () -> Unit,
 ) {
     Box(
@@ -241,8 +242,10 @@ internal fun EmptyStateCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = onAction) {
-                    Text(actionLabel)
+                if (actionLabel != null) {
+                    TextButton(onClick = onAction) {
+                        Text(actionLabel)
+                    }
                 }
             }
         }

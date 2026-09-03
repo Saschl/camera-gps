@@ -15,6 +15,14 @@ internal object IosAppPreferences {
     private const val keyDonationHintShownTimes = "ios.donationHintShownTimes"
     private const val keyForceDonationDialogOnNextStart = "ios.forceDonationDialogOnNextStart"
 
+    /**
+     * Set once every camera saved before the AccessorySetupKit switch has been
+     * re-authorized through the system picker (or once there was nothing to
+     * migrate). Until then the CBCentralManager is not created, because
+     * AccessorySetupKit refuses to migrate when one already exists.
+     */
+    private const val keyAccessoryMigrationDone = "ios.accessoryMigrationDone"
+
     private const val logLevel = "ios.logLevel"
 
     private val defaults: NSUserDefaults
@@ -34,6 +42,12 @@ internal object IosAppPreferences {
 
     fun setAppEnabled(enabled: Boolean) {
         defaults.setBool(enabled, forKey = keyAppEnabled)
+    }
+
+    fun isAccessoryMigrationDone(): Boolean = defaults.boolForKey(keyAccessoryMigrationDone)
+
+    fun setAccessoryMigrationDone(done: Boolean) {
+        defaults.setBool(done, forKey = keyAccessoryMigrationDone)
     }
 
     fun isAutoScanEnabled(): Boolean = defaults.objectForKey(keyAutoScanEnabled)?.let {

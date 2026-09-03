@@ -11,5 +11,39 @@
             <string>location</string>
             <string>bluetooth-central</string>
         </array>
+        <!--
+            AccessorySetupKit. Apple's own sources disagree on the opt-in key:
+            the Xcode "Accessory Transport Extension" template and the
+            "Discovering and configuring accessories" article write
+            NSAccessorySetupKitSupports, while the Info.plist key reference
+            documents NSAccessorySetupSupports. Unknown keys are ignored, so both
+            are declared rather than betting on one.
+        -->
+        <key>NSAccessorySetupKitSupports</key>
+        <array>
+            <string>Bluetooth</string>
+        </array>
+        <key>NSAccessorySetupSupports</key>
+        <array>
+            <string>Bluetooth</string>
+        </array>
+        <!--
+            Sony's Bluetooth SIG company identifier, hex without an 0x prefix.
+            This is the same filter the Android CompanionDeviceManager flow uses.
+            Using a value at runtime that is not declared here CRASHES the app,
+            so the Sony service UUIDs are declared too: they are unused by the
+            shipped descriptor, but let the matching strategy be changed on
+            device without another App Store submission.
+        -->
+        <key>NSAccessorySetupBluetoothCompanyIdentifiers</key>
+        <array>
+            <string>012D</string>
+        </array>
+        <key>NSAccessorySetupBluetoothServices</key>
+        <array>
+            <string>8000DD00-DD00-FFFF-FFFF-FFFFFFFFFFFF</string>
+            <string>8000CC00-CC00-FFFF-FFFF-FFFFFFFFFFFF</string>
+            <string>8000FF00-FF00-FFFF-FFFF-FFFFFFFFFFFF</string>
+        </array>
     </dict>
 </plist>

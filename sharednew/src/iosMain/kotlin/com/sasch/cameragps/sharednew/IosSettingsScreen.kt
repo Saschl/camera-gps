@@ -58,6 +58,7 @@ import cameragps.sharednew.generated.resources.tip_jar_loading
 import cameragps.sharednew.generated.resources.tip_jar_thank_you
 import cameragps.sharednew.generated.resources.tip_jar_unavailable
 import com.diamondedge.logging.LogLevel
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import com.sasch.cameragps.sharednew.ui.settings.SharedToggleRow
@@ -127,12 +128,6 @@ internal fun IosSettingsScreen(
                         onCheckedChange = onAppEnabledChange,
                     )
                     SharedToggleRow(
-                        title = stringResource(Res.string.auto_scan),
-                        description = stringResource(Res.string.auto_scan_description),
-                        checked = autoScanEnabled,
-                        onCheckedChange = onAutoScanEnabledChange,
-                    )
-                    SharedToggleRow(
                         title = stringResource(Res.string.haptic_feedback),
                         description = stringResource(Res.string.haptic_feedback_description),
                         checked = hapticsEnabled,
@@ -171,6 +166,7 @@ private const val TIP_JAR_ITEM_INDEX = 2
 @Composable
 private fun IosDebugCard() {
     var queued by remember { mutableStateOf(false) }
+    var migrationReset by remember { mutableStateOf(false) }
 
     SharedSettingsCard(title = "Debug") {
         Text(
@@ -195,6 +191,28 @@ private fun IosDebugCard() {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Queued for next app start.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                IosBluetoothController.resetAccessoryMigrationForTesting()
+                migrationReset = true
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = "Reset AccessorySetupKit migration")
+        }
+
+        if (migrationReset) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Migration state cleared. Saved cameras that are not " +
+                        "authorized will be offered again.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )

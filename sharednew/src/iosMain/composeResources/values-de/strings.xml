@@ -14,5 +14,31 @@
     <string name="precise_location">Zugriff auf genauen Standort erlauben</string>
     <string name="open_settings_for_precise_location">Damit die App korrekt funktioniert, ist der Zugriff auf den genauen Standort notwendig. Öffne die Einstellungen, gehe zu "Ort" und erlaube den Zugriff auf den genauen Standort</string>
 
+    <string name="always_location">Standortzugriff "Immer" benötigt</string>
+    <string name="open_settings_for_always_location">Damit die App GPS-Daten auch im Hintergrund an die Kamera senden kann, muss der Standortzugriff auf "Immer" stehen. iOS zeigt diese Abfrage nur ein einziges Mal an, daher lässt sich das jetzt nur noch in den Einstellungen ändern. Öffne die Einstellungen über den Button, tippe auf "Standort" und wähle "Immer".</string>
+
+
+    <string name="ios_accessory_migration_title">Kameras einmalig bestätigen</string>
+    <string name="ios_accessory_migration_message">iOS verwaltet die Kamerakopplung jetzt über ein eigenes Fenster. Bestätige deine gespeicherten Kameras einmal, dann wird alles übernommen, inklusive sämtlicher Einstellungen. Es geht nichts verloren und du musst die Kameras nicht neu koppeln.</string>
+    <string name="ios_accessory_migration_action">Kameras bestätigen</string>
+    <string name="ios_accessory_migration_restart">Schließe Alpha GPS und öffne die App erneut, um die übrigen Kameras zu bestätigen. iOS erlaubt das nur direkt nach dem Start.</string>
+
+    <string name="ios_no_cameras_title">Noch keine Kameras</string>
+    <string name="ios_no_cameras_message">Versetze deine Kamera in den Kopplungsmodus und füge sie dann hinzu. iOS zeigt dir eine eigene Liste der Sony-Kameras in der Nähe.</string>
+    <string name="ios_add_camera">Kamera hinzufügen</string>
+
+
+    <string name="ios_update_reminder_title">Alpha GPS einmal öffnen</string>
+    <string name="ios_update_reminder_body">Ein Update hat geändert, wie iOS Kameras koppelt. Öffne die App einmal und bestätige deine Kameras, sonst kann sie sich nicht mehr verbinden. Wenn schon alles funktioniert, kannst du das ignorieren.</string>
+
+    <string name="ios_migration_reminder_title">Deine Kameras sind noch nicht eingerichtet</string>
+    <string name="ios_migration_reminder_body">Alpha GPS wartet noch darauf, dass du deine Kameras im iOS-Fenster bestätigst. Bis dahin kann die App sich nicht verbinden und Fotos werden nicht mit GPS versehen.</string>
+
+
+    <string name="ios_accessory_migration_dialog_title">Kameras bestätigen</string>
+    <string name="ios_accessory_migration_dialog_message">iOS verwaltet die Kamerakopplung jetzt selbst. Deshalb muss Alpha GPS dich einmal bitten, deine bisherigen Kameras zu bestätigen.\n\nMit "Weiter" öffnet sich ein iOS-Fenster mit deinen Kameras. Bestätige es, dann wird alles übernommen, inklusive sämtlicher Einstellungen. Es geht nichts verloren und du musst die Kameras nicht neu koppeln.\n\nBis dahin kann die App sich nicht mit deinen Kameras verbinden.</string>
+    <string name="ios_accessory_migration_dialog_confirm">Weiter</string>
+    <string name="ios_accessory_migration_dialog_later">Später</string>
+
 </resources>
 

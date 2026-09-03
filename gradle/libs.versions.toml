@@ -11,7 +11,10 @@ composeBom = "2026.08.00"
 googlePlayServicesLocation = "21.4.0"
 accompanist = "0.37.3"
 lifecycleRuntimeCompose = "2.11.0"
-logging = "2.1.2"
+# 2.1.2 ships iOS klibs built with Kotlin 2.4.10 (ABI 2.4.0), which the Kotlin
+# 2.3.21 compiler above cannot consume. 2.1.1 is built with 2.3.20 (ABI 2.3.0).
+# Raise this again only together with the kotlin version.
+logging = "2.1.1"
 material = "1.14.0"
 navigationeventVersion = "1.1.2"
 review = "2.0.2"
