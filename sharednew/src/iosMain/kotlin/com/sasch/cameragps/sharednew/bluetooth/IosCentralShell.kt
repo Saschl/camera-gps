@@ -290,17 +290,43 @@ internal class IosCentralShell(
             }
         }
 
-    private val central: CBCentralManager = CBCentralManager(
+    /**
+     * Nulled by [teardown]. Held nullably so the CBCentralManager is released
+     * even if something still holds this shell: AccessorySetupKit refuses its
+     * picker while a manager is alive, and Kotlin/Native releases Objective-C
+     * objects on its collector rather than immediately, so every reference to it
+     * has to be dropped explicitly.
+     */
+    private var centralOrNull: CBCentralManager? = CBCentralManager(
         delegate = delegate,
         queue = null,
         options = mapOf(CBCentralManagerOptionRestoreIdentifierKey to "com.saschl.cameragps.central"),
     )
 
+    private val central: CBCentralManager? get() = centralOrNull
+
+    /**
+     * Release the manager and stop it calling back.
+     *
+     * Called before the shell reference is dropped, so nothing can arrive on a
+     * half-dismantled shell and the manager itself is freed promptly.
+     */
+    fun teardown() {
+        val manager = centralOrNull ?: return
+        log.i { "Tearing down the CBCentralManager" }
+        runCatching { if (manager.isScanning) manager.stopScan() }
+        manager.delegate = null
+        centralOrNull = null
+        connected.clear()
+        discovered.clear()
+        restoredAwaitingPowerOn.clear()
+    }
+
     // ---------------------------------------------------------------------------
     // Primitives composed by the controller
     // ---------------------------------------------------------------------------
 
-    val isPoweredOn: Boolean get() = central.state == CBManagerStatePoweredOn
+    val isPoweredOn: Boolean get() = central?.state == CBManagerStatePoweredOn
 
     fun isConnected(identifier: String): Boolean = connected.containsKey(identifier)
 
@@ -322,14 +348,16 @@ internal class IosCentralShell(
     /** Resolve peripheral UUIDs to names; empty when the central is not powered on. */
     fun retrieveNames(identifiers: List<String>): Map<String, String?> {
         if (!isPoweredOn) return emptyMap()
-        return central.retrievePeripheralsWithIdentifiers(identifiers.map { NSUUID(uUIDString = it) })
-            .filterIsInstance<CBPeripheral>()
-            .associate { it.identifier.UUIDString.uppercase() to it.name }
+        return central?.retrievePeripheralsWithIdentifiers(identifiers.map { NSUUID(uUIDString = it) })
+            ?.filterIsInstance<CBPeripheral>()
+            ?.associate { it.identifier.UUIDString.uppercase() to it.name }
+            ?: emptyMap()
     }
 
     fun retrievePeripherals(identifiers: List<String>): List<CBPeripheral> =
-        central.retrievePeripheralsWithIdentifiers(identifiers.map { NSUUID(uUIDString = it) })
-            .filterIsInstance<CBPeripheral>()
+        central?.retrievePeripheralsWithIdentifiers(identifiers.map { NSUUID(uUIDString = it) })
+            ?.filterIsInstance<CBPeripheral>()
+            .orEmpty()
 
     /**
      * Start scanning, if it is both needed and useful.
@@ -341,25 +369,25 @@ internal class IosCentralShell(
      * filter may scan anywhere.
      */
     fun startScanIfNeeded(serviceUUIDs: List<CBUUID>? = null) {
-        if (!isPoweredOn || central.isScanning) return
+        if (!isPoweredOn || central?.isScanning != false) return
         if (!RestorePolicy.allowsScan(hasServiceFilter = serviceUUIDs != null, appActive = isAppActive())) {
             log.w { "Refusing an unfiltered scan while the app is not foreground-active" }
             return
         }
         log.i { "Starting scan (filter=${serviceUUIDs?.map { it.UUIDString } ?: "none"})" }
-        central.scanForPeripheralsWithServices(serviceUUIDs = serviceUUIDs, options = null)
+        central?.scanForPeripheralsWithServices(serviceUUIDs = serviceUUIDs, options = null)
     }
 
     fun stopScan() {
-        if (isPoweredOn) central.stopScan()
+        if (isPoweredOn) central?.stopScan()
     }
 
     fun stopScanIfNeeded() {
-        if (isPoweredOn && central.isScanning) central.stopScan()
+        if (isPoweredOn && central?.isScanning == true) central?.stopScan()
     }
 
     fun cancelConnection(peripheral: CBPeripheral) {
-        if (isPoweredOn) central.cancelPeripheralConnection(peripheral)
+        if (isPoweredOn) central?.cancelPeripheralConnection(peripheral)
     }
 
     fun cancelConnections(peripherals: List<CBPeripheral>) {
@@ -371,7 +399,7 @@ internal class IosCentralShell(
         val peripherals = mutableMapOf<String, CBPeripheral>()
         connected.forEach { (id, p) -> peripherals[id] = p }
         discovered.forEach { (id, p) -> peripherals[id] = p }
-        peripherals.values.forEach { central.cancelPeripheralConnection(it) }
+        peripherals.values.forEach { central?.cancelPeripheralConnection(it) }
     }
 
     /**
@@ -386,7 +414,7 @@ internal class IosCentralShell(
                     .onSubscription {
                         // Initiate only once the waiter is subscribed so the
                         // completion event cannot slip past it
-                        central.connectPeripheral(
+                        central?.connectPeripheral(
                             peripheral,
                             options = mapOf(CBConnectPeripheralOptionEnableAutoReconnect to true)
                         )
@@ -398,7 +426,7 @@ internal class IosCentralShell(
             // connect. On ConnectFailed the attempt is already dead, and cancelling
             // would kill the auto-reconnect didFailToConnect may just have issued.
             if (event == null && isPoweredOn) {
-                central.cancelPeripheralConnection(peripheral)
+                central?.cancelPeripheralConnection(peripheral)
             }
         }
         return event is ConnectionEvent.Connected
@@ -417,7 +445,7 @@ internal class IosCentralShell(
         // didDisconnect callback when cancelled — return after the timeout
         withTimeoutOrNull(DISCONNECT_TIMEOUT_MS.milliseconds) {
             connectionEvents
-                .onSubscription { central.cancelPeripheralConnection(peripheral) }
+                .onSubscription { central?.cancelPeripheralConnection(peripheral) }
                 .first {
                     it is ConnectionEvent.Disconnected &&
                             it.identifier.equals(resolvedIdentifier, ignoreCase = true)
@@ -437,12 +465,12 @@ internal class IosCentralShell(
         val resolvedIdentifier = resolveKnownIdentifier(identifier)
         if (connected.containsKey(resolvedIdentifier)) return false
         val peripheral = discovered[resolvedIdentifier]
-            ?: central.retrievePeripheralsWithIdentifiers(listOf(NSUUID(uUIDString = identifier)))
-                .filterIsInstance<CBPeripheral>()
-                .firstOrNull()
+            ?: central?.retrievePeripheralsWithIdentifiers(listOf(NSUUID(uUIDString = identifier)))
+                ?.filterIsInstance<CBPeripheral>()
+                ?.firstOrNull()
             ?: return false
         discovered[peripheral.identifier.UUIDString] = peripheral
-        central.connectPeripheral(
+        central?.connectPeripheral(
             peripheral,
             options = mapOf(
                 CBConnectPeripheralOptionNotifyOnConnectionKey to true,
@@ -457,7 +485,7 @@ internal class IosCentralShell(
         val id = peripheral.identifier.UUIDString
         discovered[id] = peripheral
         if (!connected.containsKey(id)) {
-            central.connectPeripheral(
+            central?.connectPeripheral(
                 peripheral,
                 options = mapOf(
                     CBConnectPeripheralOptionNotifyOnConnectionKey to true,

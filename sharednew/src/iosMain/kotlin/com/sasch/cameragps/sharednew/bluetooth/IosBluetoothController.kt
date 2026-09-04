@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import platform.AccessorySetupKit.ASErrorCodePickerAlreadyActive
+import platform.AccessorySetupKit.ASErrorCodePickerRestricted
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralStateConnected
 import kotlin.native.runtime.GC
@@ -231,7 +232,15 @@ object IosBluetoothController : BluetoothController {
      * picker, so Kotlin/Native's collector can actually deallocate the
      * CBCentralManager. The picker is refused while one is alive.
      */
-    private const val CENTRAL_RELEASE_GRACE_MS = 500L
+    private const val CENTRAL_RELEASE_GRACE_MS = 2_000L
+
+    /**
+     * `ASErrorCodePickerRestricted` means the manager was still alive when the
+     * picker was asked for. Deallocation is not deterministic, so back off and
+     * try again rather than failing the migration outright.
+     */
+    private const val PICKER_RESTRICTED_ATTEMPTS = 4
+    private const val PICKER_RETRY_DELAY_MS = 2_500L
 
     /**
      * The CBCentralManager, created on demand by [startCentralIfNeeded].
@@ -751,7 +760,7 @@ object IosBluetoothController : BluetoothController {
             delay(CENTRAL_RELEASE_GRACE_MS)
         }
 
-        val outcome = accessorySession.showMigrationPicker(candidates)
+        val outcome = showMigrationPickerWithRetries(candidates)
         logging.i { "Migration picker finished: $outcome" }
         recomputeMigrationCandidates()
 
@@ -791,6 +800,31 @@ object IosBluetoothController : BluetoothController {
         migrationAutoAttempted = false
         _migrationNeedsRestart.value = false
         controllerScope.launch { evaluateMigration() }
+    }
+
+    /**
+     * Show the migration picker, retrying while it is refused as restricted.
+     *
+     * That refusal means a CBCentralManager was still alive. Releasing one is
+     * not instantaneous under Kotlin/Native, so each retry tears down again and
+     * waits, rather than giving up on a race.
+     */
+    private suspend fun showMigrationPickerWithRetries(
+        candidates: List<PendingMigration>,
+    ): IosAccessoryShell.PickerOutcome {
+        var outcome = accessorySession.showMigrationPicker(candidates)
+        repeat(PICKER_RESTRICTED_ATTEMPTS - 1) { attempt ->
+            val restricted = outcome as? IosAccessoryShell.PickerOutcome.Failed
+            if (restricted?.code != ASErrorCodePickerRestricted) return outcome
+            logging.w {
+                "Migration picker restricted (attempt ${attempt + 1}); " +
+                        "the central is probably still alive, retrying"
+            }
+            stopCentral()
+            delay(PICKER_RETRY_DELAY_MS)
+            outcome = accessorySession.showMigrationPicker(candidates)
+        }
+        return outcome
     }
 
     private fun handleMigrationComplete() {
