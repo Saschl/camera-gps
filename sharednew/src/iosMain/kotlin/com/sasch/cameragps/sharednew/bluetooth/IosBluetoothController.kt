@@ -28,6 +28,8 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -93,19 +95,16 @@ object IosBluetoothController : BluetoothController {
                     "migrationDone=${IosAppPreferences.isAccessoryMigrationDone()}"
         }
 
-        // AccessorySetupKit first, then the central — but ONLY once migration is
-        // settled, because AccessorySetupKit refuses to migrate already-paired
-        // cameras while a CBCentralManager exists.
+        // The central comes up on every launch, unconditionally. State
+        // restoration only delivers willRestoreState if the manager is recreated
+        // inside didFinishLaunchingWithOptions, so anything conditional or
+        // asynchronous here kills background reconnect.
         //
-        // When migration IS settled the central has to come up right here, on
-        // this call, not after any await: state restoration only delivers
-        // willRestoreState if the manager is recreated inside
-        // didFinishLaunchingWithOptions, so deferring it kills background
-        // reconnect for every migrated camera.
+        // AccessorySetupKit refuses to migrate while a central exists, so the
+        // migration flow tears it down when the app reaches the foreground (see
+        // consumeAutoMigrationPrompt) rather than withholding it at launch.
         accessorySession.activate()
-        if (IosAppPreferences.isAccessoryMigrationDone()) {
-            startCentralIfNeeded()
-        }
+        startCentralIfNeeded()
         controllerScope.launch { evaluateMigration() }
     }
 
@@ -224,6 +223,13 @@ object IosBluetoothController : BluetoothController {
     private var migrationAutoAttempted = false
 
     /**
+     * How long to wait after releasing the central before showing the migration
+     * picker, so Kotlin/Native's collector can actually deallocate the
+     * CBCentralManager. The picker is refused while one is alive.
+     */
+    private const val CENTRAL_RELEASE_GRACE_MS = 500L
+
+    /**
      * The CBCentralManager, created on demand by [startCentralIfNeeded].
      *
      * It is deliberately NOT created at object initialization: AccessorySetupKit
@@ -234,8 +240,16 @@ object IosBluetoothController : BluetoothController {
      */
     private var centralShell: IosCentralShell? = null
 
-    private fun createCentralShell() = IosCentralShell(
-        scope = controllerScope,
+    /**
+     * Scope for the central's own delegate work. Its coroutines capture the
+     * CBCentralManager, so cancelling this is what actually lets the manager be
+     * released; dropping [centralShell] alone would leave in-flight reconnect
+     * coroutines holding it alive.
+     */
+    private var centralScope: CoroutineScope? = null
+
+    private fun createCentralShell(scope: CoroutineScope) = IosCentralShell(
+        scope = scope,
         transport = transport,
         isAppEnabled = { appEnabled },
         shouldAutoReconnect = { id -> shouldAutoReconnect(id) },
@@ -285,24 +299,20 @@ object IosBluetoothController : BluetoothController {
     private fun startCentralIfNeeded() {
         if (centralShell != null) return
         logging.i { "Creating the CBCentralManager" }
-        centralShell = createCentralShell()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        centralScope = scope
+        centralShell = createCentralShell(scope)
     }
 
-    /**
-     * Release the CBCentralManager.
-     *
-     * AccessorySetupKit refuses to run its migration flow while one exists, and
-     * several paths legitimately bring it up before every camera has been
-     * confirmed — adding a new camera, or AccessorySetupKit failing to activate.
-     * Without this, those users could only migrate by relaunching the app.
-     * Dropping the last reference deallocates the manager; pending connects go
-     * with it, which is why the full teardown runs first.
-     */
     @OptIn(NativeRuntimeApi::class)
     private fun stopCentral() {
         if (centralShell == null) return
         logging.i { "Releasing the CBCentralManager" }
         forceShutdownAllConnections()
+        // Cancel first: a suspended reconnect coroutine captures the manager and
+        // would keep it alive no matter what happens to the reference below.
+        centralScope?.cancel()
+        centralScope = null
         centralShell = null
         _bluetoothPoweredOn.value = false
         // Dropping the Kotlin reference does not release the Objective-C object
@@ -702,6 +712,11 @@ object IosBluetoothController : BluetoothController {
         if (_migrationCandidates.value.isEmpty()) return false
         if (_migrationNeedsRestart.value) return false
         migrationAutoAttempted = true
+        // Release the central now, while the explainer is still being read.
+        // Kotlin/Native hands the Objective-C release to its collector, so the
+        // manager is not gone the instant the reference drops; doing this here
+        // rather than immediately before showPicker gives it those seconds.
+        stopCentral()
         logging.i { "Raising the migration explainer" }
         return true
     }
@@ -719,8 +734,15 @@ object IosBluetoothController : BluetoothController {
         // release it for the duration of the picker. Without this the flow fails
         // for anyone whose central came up first, which is every user who added
         // a camera before migrating.
-        val hadCentral = centralShell != null
-        if (hadCentral) stopCentral()
+        // The automatic path already released the central while the explainer was
+        // on screen. This covers the manual retry from the device-list card,
+        // where the release would otherwise be milliseconds before the picker.
+        // Kotlin/Native releases the Objective-C manager on its collector, so
+        // give that a moment to actually happen.
+        if (centralShell != null) {
+            stopCentral()
+            delay(CENTRAL_RELEASE_GRACE_MS)
+        }
 
         val outcome = accessorySession.showMigrationPicker(candidates)
         logging.i { "Migration picker finished: $outcome" }
@@ -735,8 +757,9 @@ object IosBluetoothController : BluetoothController {
             // double tap does not strand the user on that message.
             _migrationNeedsRestart.value = true
         }
-        // Bring the central back if migration did not finish and start it itself.
-        if (hadCentral) startCentralIfNeeded()
+        // Always bring the central back: a cancelled or failed migration must not
+        // leave the app without one. No-op when finishMigration already did it.
+        startCentralIfNeeded()
         return outcome is IosAccessoryShell.PickerOutcome.Completed
     }
 
