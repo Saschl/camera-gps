@@ -26,10 +26,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.always_location
-import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_title
-import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_message
-import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_later
-import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_confirm
 import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.donation_dialog_confirm
@@ -39,6 +35,13 @@ import cameragps.sharednew.generated.resources.donation_dialog_title
 import cameragps.sharednew.generated.resources.further_help
 import cameragps.sharednew.generated.resources.header_device_list
 import cameragps.sharednew.generated.resources.info_24px
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_confirm
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_later
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_dialog_title
+import cameragps.sharednew.generated.resources.ios_accessory_migration_error_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_error_retry
+import cameragps.sharednew.generated.resources.ios_accessory_migration_error_title
 import cameragps.sharednew.generated.resources.ios_troubleshooting_got_it
 import cameragps.sharednew.generated.resources.open_location_settings
 import cameragps.sharednew.generated.resources.open_settings_for_always_location
@@ -179,6 +182,7 @@ internal fun CameraGpsIosApp() {
     }
     val migrationCandidates by bluetoothController.migrationCandidates.collectAsState()
     val migrationNeedsRestart by bluetoothController.migrationNeedsRestart.collectAsState()
+    val migrationError by bluetoothController.migrationError.collectAsState()
     // No scan effect any more: AccessorySetupKit owns discovery, and with it
     // declared a CoreBluetooth scan can only ever return already-authorized
     // accessories. Cameras are added through the system picker instead.
@@ -199,6 +203,27 @@ internal fun CameraGpsIosApp() {
         if (bluetoothController.consumeAutoMigrationPrompt()) {
             showMigrationExplainer = true
         }
+    }
+
+    if (migrationError) {
+        AlertDialog(
+            onDismissRequest = { bluetoothController.clearMigrationError() },
+            title = { Text(stringResource(Res.string.ios_accessory_migration_error_title)) },
+            text = { Text(stringResource(Res.string.ios_accessory_migration_error_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    bluetoothController.clearMigrationError()
+                    scope.launch { bluetoothController.presentMigrationPicker() }
+                }) {
+                    Text(stringResource(Res.string.ios_accessory_migration_error_retry))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { bluetoothController.clearMigrationError() }) {
+                    Text(stringResource(Res.string.ios_accessory_migration_dialog_later))
+                }
+            },
+        )
     }
 
     if (showMigrationExplainer) {

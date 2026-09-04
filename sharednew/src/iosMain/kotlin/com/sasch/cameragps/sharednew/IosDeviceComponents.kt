@@ -5,15 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,13 +22,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.app_disabled_message
 import cameragps.sharednew.generated.resources.app_disabled_title
 import cameragps.sharednew.generated.resources.app_settings
 import cameragps.sharednew.generated.resources.further_help
-import cameragps.sharednew.generated.resources.ios_no_devices_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_action
+import cameragps.sharednew.generated.resources.ios_accessory_migration_message
+import cameragps.sharednew.generated.resources.ios_accessory_migration_restart
+import cameragps.sharednew.generated.resources.ios_accessory_migration_title
+import cameragps.sharednew.generated.resources.ios_add_camera
+import cameragps.sharednew.generated.resources.ios_no_cameras_message
+import cameragps.sharednew.generated.resources.ios_no_cameras_title
 import cameragps.sharednew.generated.resources.ios_troubleshooting_got_it
 import cameragps.sharednew.generated.resources.ios_troubleshooting_need_help
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_1_bluetooth
@@ -40,16 +45,6 @@ import cameragps.sharednew.generated.resources.ios_troubleshooting_step_4_locati
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_5_creators_app
 import cameragps.sharednew.generated.resources.ios_troubleshooting_step_6_remote_control
 import cameragps.sharednew.generated.resources.ios_troubleshooting_title
-import cameragps.sharednew.generated.resources.ios_accessory_migration_action
-import cameragps.sharednew.generated.resources.ios_accessory_migration_message
-import cameragps.sharednew.generated.resources.ios_accessory_migration_restart
-import cameragps.sharednew.generated.resources.ios_accessory_migration_title
-import cameragps.sharednew.generated.resources.ios_add_camera
-import cameragps.sharednew.generated.resources.ios_no_cameras_message
-import cameragps.sharednew.generated.resources.ios_no_cameras_title
-import cameragps.sharednew.generated.resources.scanning_for_cameras
-import cameragps.sharednew.generated.resources.scanning_paused_message
-import cameragps.sharednew.generated.resources.scanning_paused_title
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.bluetooth.accessory.PendingMigration
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
@@ -223,10 +218,11 @@ private fun MigrationCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!needsRestart) {
-                TextButton(onClick = onMigrate) {
-                    Text(stringResource(Res.string.ios_accessory_migration_action))
-                }
+            // Always offered, including after a failure: hiding it left the
+            // user with advice and no way to act on it, and a retry usually
+            // succeeds once the previous central has actually gone away.
+            TextButton(onClick = onMigrate) {
+                Text(stringResource(Res.string.ios_accessory_migration_action))
             }
         }
     }

@@ -224,6 +224,19 @@ object IosBluetoothController : BluetoothController {
     private val _migrationNeedsRestart = MutableStateFlow(false)
     val migrationNeedsRestart: StateFlow<Boolean> = _migrationNeedsRestart
 
+    /**
+     * The last migration attempt failed after exhausting its retries. Drives an
+     * error dialog offering another try — the retries handle the deallocation
+     * race, but if they run out the user has to be told rather than left with a
+     * sheet that silently never appeared.
+     */
+    private val _migrationError = MutableStateFlow(false)
+    val migrationError: StateFlow<Boolean> = _migrationError
+
+    fun clearMigrationError() {
+        _migrationError.value = false
+    }
+
     /** Guards the automatic migration sheet to one attempt per launch. */
     private var migrationAutoAttempted = false
 
@@ -745,6 +758,7 @@ object IosBluetoothController : BluetoothController {
         migrationAutoAttempted = true
         val candidates = _migrationCandidates.value
         if (candidates.isEmpty()) return true
+        _migrationError.value = false
 
         // AccessorySetupKit will not migrate while a CBCentralManager exists, so
         // release it for the duration of the picker. Without this the flow fails
@@ -767,10 +781,12 @@ object IosBluetoothController : BluetoothController {
         if (outcome is IosAccessoryShell.PickerOutcome.Failed &&
             outcome.code != ASErrorCodePickerAlreadyActive
         ) {
-            // Releasing the central may not be enough if CoreBluetooth is still
-            // holding it internally. Point at a relaunch rather than failing
-            // silently. An already-active picker is transient and excluded, so a
-            // double tap does not strand the user on that message.
+            // Retries are exhausted. Surface it and offer another attempt: the
+            // cause is usually a CBCentralManager that had not been deallocated
+            // yet, which a second try normally clears. An already-active picker
+            // is transient and excluded so a double tap does not raise this.
+            logging.w { "Migration failed after retries: ${outcome.message}" }
+            _migrationError.value = true
             _migrationNeedsRestart.value = true
         }
         // Always bring the central back: a cancelled or failed migration must not

@@ -40,5 +40,10 @@
     <string name="ios_accessory_migration_dialog_confirm">Weiter</string>
     <string name="ios_accessory_migration_dialog_later">Später</string>
 
+
+    <string name="ios_accessory_migration_error_title">Kameras konnten nicht bestätigt werden</string>
+    <string name="ios_accessory_migration_error_message">iOS hat das Bestätigungsfenster nicht geöffnet. Beim zweiten Versuch klappt es meistens.\n\nWenn es weiterhin fehlschlägt, schließe Alpha GPS im App-Umschalter vollständig, öffne es erneut und versuche es dann noch einmal.</string>
+    <string name="ios_accessory_migration_error_retry">Erneut versuchen</string>
+
 </resources>
 
