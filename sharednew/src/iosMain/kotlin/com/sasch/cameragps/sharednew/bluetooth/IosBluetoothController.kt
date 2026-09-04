@@ -7,15 +7,16 @@ import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.IosLaunchContext
 import com.sasch.cameragps.sharednew.IosMigrationReminder
-import kotlin.native.runtime.GC
-import kotlin.native.runtime.NativeRuntimeApi
-import platform.AccessorySetupKit.ASErrorCodePickerAlreadyActive
-import com.sasch.cameragps.sharednew.bluetooth.accessory.AccessoryMigrationPlanner
-import com.sasch.cameragps.sharednew.bluetooth.accessory.PendingMigration
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.centralShell
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.clearPairingFailedDevice
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.ensureInitialized
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.reconnectToPersistedPeripherals
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.repository
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.shell
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.startCentralIfNeeded
+import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController.transport
+import com.sasch.cameragps.sharednew.bluetooth.accessory.AccessoryMigrationPlanner
+import com.sasch.cameragps.sharednew.bluetooth.accessory.PendingMigration
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
@@ -34,8 +35,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import platform.AccessorySetupKit.ASErrorCodePickerAlreadyActive
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralStateConnected
+import kotlin.native.runtime.GC
+import kotlin.native.runtime.NativeRuntimeApi
 
 /**
  * iOS Bluetooth policy layer and the stable facade the shared Compose UI
@@ -312,6 +316,7 @@ object IosBluetoothController : BluetoothController {
         // Cancel first: a suspended reconnect coroutine captures the manager and
         // would keep it alive no matter what happens to the reference below.
         centralScope?.cancel()
+        centralShell?.stopScan()
         centralScope = null
         centralShell = null
         _bluetoothPoweredOn.value = false
@@ -707,7 +712,7 @@ object IosBluetoothController : BluetoothController {
      * Once per launch, so declining does not trap the user in a loop; the card
      * in the device list stays available for a manual retry.
      */
-    fun consumeAutoMigrationPrompt(): Boolean {
+    suspend fun consumeAutoMigrationPrompt(): Boolean {
         if (migrationAutoAttempted) return false
         if (_migrationCandidates.value.isEmpty()) return false
         if (_migrationNeedsRestart.value) return false
@@ -717,6 +722,8 @@ object IosBluetoothController : BluetoothController {
         // manager is not gone the instant the reference drops; doing this here
         // rather than immediately before showPicker gives it those seconds.
         stopCentral()
+        delay(CENTRAL_RELEASE_GRACE_MS)
+
         logging.i { "Raising the migration explainer" }
         return true
     }
